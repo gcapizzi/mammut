@@ -11,9 +11,13 @@ impl Client {
         Client { http_client }
     }
 
-    pub fn tweets<const N: usize>(&self, ids: [&str; N]) -> Result<String, anyhow::Error> {
+    pub async fn tweets<const N: usize>(
+        &self,
+        ids: [&str; N],
+    ) -> Result<String, http_types::Error> {
         let mut url = url::Url::parse(BASE_URL)?.join("tweets")?;
         url.query_pairs_mut().append_pair("ids", &ids.join(","));
-        self.http_client.get(&url)
+        let mut resp = self.http_client.send(http_types::Request::get(url)).await?;
+        resp.body_string().await
     }
 }

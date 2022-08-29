@@ -10,3 +10,6 @@ oauth2 = { version = "4.2.3", default-features = false, features = ["ureq"] }
 url = "2.2.2"
 ureq = "2.5.0"
 toml = "0.5.9"
+http-types = "2.12"
+surf = "2.3"
+futures = "0.3"
