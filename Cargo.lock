@@ -1694,6 +1694,7 @@ dependencies = [
  "futures",
  "http-types",
  "oauth2",
+ "serde",
  "surf",
  "tiny_http",
  "toml",
