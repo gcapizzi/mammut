@@ -3,8 +3,6 @@ use oauth2::TokenResponse;
 
 use serde::{Deserialize, Serialize};
 
-const PATH: &str = "/tmp/twt_token";
-
 #[derive(Deserialize, Serialize)]
 struct Token {
     access_token: String,
@@ -34,14 +32,14 @@ pub fn get_token(
     auth_url: String,
     token_url: String,
 ) -> Result<String, anyhow::Error> {
-    let token = load_from_disk(PATH).or_else(|_| {
-        login(client_id, client_secret, auth_url, token_url).and_then(|s| save_to_disk(PATH, s))
-    })?;
+    let token = load_from_disk()
+        .or_else(|_| login(client_id, client_secret, auth_url, token_url).and_then(save_to_disk))?;
 
     Ok(token.access_token().clone())
 }
 
-fn load_from_disk<P: AsRef<std::path::Path>>(path: P) -> Result<Token, anyhow::Error> {
+fn load_from_disk() -> Result<Token, anyhow::Error> {
+    let path = xdg::BaseDirectories::with_prefix("twt")?.get_cache_file("token");
     let token_str = std::fs::read_to_string(path)?;
     let token = toml::from_str::<Token>(&token_str)?;
     if token.is_expired() {
@@ -51,10 +49,8 @@ fn load_from_disk<P: AsRef<std::path::Path>>(path: P) -> Result<Token, anyhow::E
     }
 }
 
-fn save_to_disk<P: AsRef<std::path::Path>>(
-    path: P,
-    token: Token,
-) -> Result<Token, anyhow::Error> {
+fn save_to_disk(token: Token) -> Result<Token, anyhow::Error> {
+    let path = xdg::BaseDirectories::with_prefix("twt")?.place_cache_file("token")?;
     std::fs::write(path, toml::to_string(&token)?)?;
     Ok(token)
 }
