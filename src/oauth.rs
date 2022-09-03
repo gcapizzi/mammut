@@ -3,57 +3,60 @@ use oauth2::TokenResponse;
 
 use serde::{Deserialize, Serialize};
 
+const PATH: &str = "/tmp/twt_token";
+
 #[derive(Deserialize, Serialize)]
-pub struct Session {
-    token_response: oauth2::basic::BasicTokenResponse,
-    created_at: std::time::SystemTime,
+struct Token {
+    access_token: String,
+    expires_at: std::time::SystemTime,
 }
 
-const PATH: &str = "/tmp/twt_session";
-
-impl Session {
-    pub fn start(
-        client_id: String,
-        client_secret: String,
-        auth_url: String,
-        token_url: String,
-    ) -> Result<Session, anyhow::Error> {
-        load_from_disk(PATH).or_else(|_| {
-            login(client_id, client_secret, auth_url, token_url).and_then(|s| save_to_disk(PATH, s))
-        })
-    }
-
-    pub fn token(&self) -> &String {
-        self.token_response.access_token().secret()
-    }
-
-    pub fn is_expired(&self) -> bool {
-        if let (Ok(elapsed), Some(max)) =
-            (self.created_at.elapsed(), self.token_response.expires_in())
-        {
-            elapsed > max
-        } else {
-            false
+impl Token {
+    fn new(access_token: String, expires_in: std::time::Duration) -> Token {
+        Token {
+            access_token,
+            expires_at: std::time::SystemTime::now() + expires_in,
         }
     }
+
+    fn access_token(&self) -> &String {
+        &self.access_token
+    }
+
+    fn is_expired(&self) -> bool {
+        self.expires_at <= std::time::SystemTime::now()
+    }
 }
 
-fn load_from_disk<P: AsRef<std::path::Path>>(path: P) -> Result<Session, anyhow::Error> {
-    let session_str = std::fs::read_to_string(path)?;
-    let session = toml::from_str::<Session>(&session_str)?;
-    if session.is_expired() {
-        Err(anyhow!("session is expired"))
+pub fn get_token(
+    client_id: String,
+    client_secret: String,
+    auth_url: String,
+    token_url: String,
+) -> Result<String, anyhow::Error> {
+    let token = load_from_disk(PATH).or_else(|_| {
+        login(client_id, client_secret, auth_url, token_url).and_then(|s| save_to_disk(PATH, s))
+    })?;
+
+    Ok(token.access_token().clone())
+}
+
+fn load_from_disk<P: AsRef<std::path::Path>>(path: P) -> Result<Token, anyhow::Error> {
+    let token_str = std::fs::read_to_string(path)?;
+    let token = toml::from_str::<Token>(&token_str)?;
+    if token.is_expired() {
+        Err(anyhow!("token is expired"))
     } else {
-        Ok(session)
+        Ok(token)
     }
 }
 
 fn save_to_disk<P: AsRef<std::path::Path>>(
     path: P,
-    session: Session,
-) -> Result<Session, anyhow::Error> {
-    std::fs::write(path, toml::to_string(&session)?)?;
-    Ok(session)
+    token: Token,
+) -> Result<Token, anyhow::Error> {
+    std::fs::write(path, toml::to_string(&token)?)?;
+    Ok(token)
 }
 
 fn login(
@@ -61,7 +64,7 @@ fn login(
     client_secret: String,
     auth_url: String,
     token_url: String,
-) -> Result<Session, anyhow::Error> {
+) -> Result<Token, anyhow::Error> {
     let redirect_addr = "0.0.0.0:8000";
     let redirect_url = oauth2::RedirectUrl::new(format!("http://{}", redirect_addr))?;
 
@@ -84,7 +87,7 @@ fn login(
 
     println!("Browse to: {}", auth_url);
 
-    let (code, state) = authorise(redirect_addr)?;
+    let (code, state) = receive_redirect(redirect_addr)?;
 
     if &state != csrf_state.secret() {
         return Err(anyhow!("wrong state!"));
@@ -95,13 +98,15 @@ fn login(
         .set_pkce_verifier(pkce_verifier)
         .request(oauth2::ureq::http_client)?;
 
-    Ok(Session {
-        token_response,
-        created_at: std::time::SystemTime::now(),
-    })
+    Ok(Token::new(
+        token_response.access_token().secret().clone(),
+        token_response
+            .expires_in()
+            .ok_or(anyhow!("no expires_in field"))?,
+    ))
 }
 
-fn authorise(addr: &str) -> Result<(String, String), anyhow::Error> {
+fn receive_redirect(addr: &str) -> Result<(String, String), anyhow::Error> {
     let server = tiny_http::Server::http(addr).unwrap();
     let request = server.recv()?;
     let url = url::Url::parse("http://base")?.join(request.url())?;

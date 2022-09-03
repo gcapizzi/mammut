@@ -1,14 +1,12 @@
-use crate::oauth;
-
 pub struct AuthenticatedClient {
-    session: oauth::Session,
+    token: String,
     client: surf::Client,
 }
 
 impl AuthenticatedClient {
-    pub fn new(session: oauth::Session) -> AuthenticatedClient {
+    pub fn new(token: String) -> AuthenticatedClient {
         AuthenticatedClient {
-            session,
+            token,
             client: surf::Client::new(),
         }
     }
@@ -17,7 +15,7 @@ impl AuthenticatedClient {
         &self,
         request: impl Into<http_types::Request>,
     ) -> Result<http_types::Response, http_types::Error> {
-        let bearer_token = format!("Bearer {}", self.session.token());
+        let bearer_token = format!("Bearer {}", self.token);
         let mut req: http_types::Request = request.into();
         req.append_header("Authorization", bearer_token.as_str());
         self.client
