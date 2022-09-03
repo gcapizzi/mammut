@@ -1,13 +1,11 @@
-use crate::http;
-
 const BASE_URL: &str = "https://api.twitter.com/2/";
 
-pub struct Client {
-    http_client: http::AuthenticatedClient,
+pub struct Client<C> {
+    http_client: C,
 }
 
-impl Client {
-    pub fn new(http_client: http::AuthenticatedClient) -> Client {
+impl<C: http_client::HttpClient> Client<C> {
+    pub fn new(http_client: C) -> Client<C> {
         Client { http_client }
     }
 

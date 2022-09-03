@@ -14,7 +14,7 @@ fn main() -> Result<(), anyhow::Error> {
         AUTH_URL.to_string(),
         TOKEN_URL.to_string(),
     )?;
-    let http_client = http::AuthenticatedClient::new(token);
+    let http_client = http::AuthenticatedClient::new(http_client::h1::H1Client::new(), token);
     let client = twitter::Client::new(http_client);
 
     dbg!(block_on(client.tweets([

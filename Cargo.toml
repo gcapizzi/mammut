@@ -5,13 +5,14 @@ edition = "2021"
 
 [dependencies]
 anyhow = "1.0"
-tiny_http = "0.11"
-oauth2 = { version = "4.2.3", default-features = false, features = ["ureq"] }
-url = "2.2.2"
-ureq = "2.5.0"
-toml = "0.5.9"
-http-types = "2.12"
-surf = "2.3"
+async-trait = "0.1.57"
 futures = "0.3"
+http-client = "6.5.3"
+http-types = "2.12"
+oauth2 = { version = "4.2.3", default-features = false, features = ["ureq"] }
 serde = { version = "1.0", features = ["derive"] }
+tiny_http = "0.11"
+toml = "0.5.9"
+ureq = "2.5.0"
+url = "2.2.2"
 xdg = "2.4"
