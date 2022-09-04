@@ -1,7 +1,9 @@
 use anyhow::anyhow;
 use oauth2::TokenResponse;
-
 use serde::{Deserialize, Serialize};
+
+const AUTH_URL: &str = "https://twitter.com/i/oauth2/authorize";
+const TOKEN_URL: &str = "https://api.twitter.com/2/oauth2/token";
 
 #[derive(Deserialize, Serialize)]
 struct Token {
@@ -26,15 +28,8 @@ impl Token {
     }
 }
 
-pub fn get_token(
-    client_id: String,
-    client_secret: String,
-    auth_url: String,
-    token_url: String,
-) -> Result<String, anyhow::Error> {
-    let token = load_from_disk()
-        .or_else(|_| login(client_id, client_secret, auth_url, token_url).and_then(save_to_disk))?;
-
+pub fn get_token() -> Result<String, anyhow::Error> {
+    let token = load_from_disk().or_else(|_| login().and_then(save_to_disk))?;
     Ok(token.access_token().clone())
 }
 
@@ -55,19 +50,14 @@ fn save_to_disk(token: Token) -> Result<Token, anyhow::Error> {
     Ok(token)
 }
 
-fn login(
-    client_id: String,
-    client_secret: String,
-    auth_url: String,
-    token_url: String,
-) -> Result<Token, anyhow::Error> {
+fn login() -> Result<Token, anyhow::Error> {
     let redirect_addr = "0.0.0.0:8000";
     let redirect_url = oauth2::RedirectUrl::new(format!("http://{}", redirect_addr))?;
 
-    let client_id = oauth2::ClientId::new(client_id);
-    let client_secret = oauth2::ClientSecret::new(client_secret);
-    let auth_url = oauth2::AuthUrl::new(auth_url)?;
-    let token_url = oauth2::TokenUrl::new(token_url)?;
+    let client_id = oauth2::ClientId::new(std::env::var("TWT_CLIENT_ID")?);
+    let client_secret = oauth2::ClientSecret::new(std::env::var("TWT_CLIENT_SECRET")?);
+    let auth_url = oauth2::AuthUrl::new(AUTH_URL.to_string())?;
+    let token_url = oauth2::TokenUrl::new(TOKEN_URL.to_string())?;
     let oauth2_client =
         oauth2::basic::BasicClient::new(client_id, Some(client_secret), auth_url, Some(token_url))
             .set_redirect_uri(redirect_url);
