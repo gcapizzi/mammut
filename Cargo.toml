@@ -6,13 +6,14 @@ edition = "2021"
 [dependencies]
 anyhow = "1.0"
 async-trait = "0.1.57"
+base64 = "0.13.0"
 futures = "0.3"
 http-client = "6.5.3"
 http-types = "2.12"
-oauth2 = { version = "4.2.3", default-features = false, features = ["ureq"] }
+rand = "0.8.5"
 serde = { version = "1.0", features = ["derive"] }
+sha2 = "0.10.5"
 tiny_http = "0.11"
 toml = "0.5.9"
-ureq = "2.5.0"
 url = "2.2.2"
 xdg = "2.4"
