@@ -5,9 +5,9 @@ mod twitter;
 use futures::executor::block_on;
 
 fn main() -> Result<(), anyhow::Error> {
-    let token = block_on(oauth::get_token(http_client::h1::H1Client::new()))?;
-    let authenticated_client =
-        http::AuthenticatedClient::new(http_client::h1::H1Client::new(), token);
+    let http_client = http_client::h1::H1Client::new();
+    let token = block_on(oauth::get_access_token(&http_client))?;
+    let authenticated_client = http::AuthenticatedClient::new(http_client, token);
     let client = twitter::Client::new(authenticated_client);
 
     dbg!(block_on(client.tweets([

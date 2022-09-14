@@ -10,13 +10,15 @@ const PASSWORD_LEN: usize = 128;
 #[derive(Deserialize, Serialize)]
 struct Token {
     access_token: String,
+    refresh_token: Option<String>,
     expires_at: std::time::SystemTime,
 }
 
 impl Token {
-    fn new(access_token: String, expires_in: u64) -> Token {
+    fn new(access_token: String, refresh_token: Option<String>, expires_in: u64) -> Token {
         Token {
             access_token,
+            refresh_token,
             expires_at: std::time::SystemTime::now() + std::time::Duration::from_secs(expires_in),
         }
     }
@@ -25,43 +27,66 @@ impl Token {
         &self.access_token
     }
 
+    fn refresh_token(&self) -> &Option<String> {
+        &self.refresh_token
+    }
+
     fn is_expired(&self) -> bool {
         self.expires_at <= std::time::SystemTime::now()
     }
 }
 
-pub async fn get_token(http_client: impl http_client::HttpClient) -> Result<String, anyhow::Error> {
-    let token = if let Ok(t) = load_from_disk() {
-        t
-    } else {
-        login(http_client).await.and_then(save_to_disk)?
-    };
+pub async fn get_access_token(
+    http_client: &impl http_client::HttpClient,
+) -> Result<String, anyhow::Error> {
+    let token = get_token(http_client).await?;
     Ok(token.access_token().clone())
+}
+
+async fn get_token(http_client: &impl http_client::HttpClient) -> Result<Token, anyhow::Error> {
+    if let Ok(t) = load_from_disk() {
+        if t.is_expired() {
+            let new_t = if let Ok(t) = refresh_token(http_client, t).await {
+                t
+            } else {
+                login(http_client).await?
+            };
+            save_to_disk(&new_t)?;
+            Ok(new_t)
+        } else {
+            return Ok(t);
+        }
+    } else {
+        let new_t = login(http_client).await?;
+        save_to_disk(&new_t)?;
+        Ok(new_t)
+    }
 }
 
 fn load_from_disk() -> Result<Token, anyhow::Error> {
     let path = xdg::BaseDirectories::with_prefix("twt")?.get_cache_file("token");
     let token_str = std::fs::read_to_string(path)?;
-    let token = toml::from_str::<Token>(&token_str)?;
-    if token.is_expired() {
-        Err(anyhow!("token is expired"))
-    } else {
-        Ok(token)
-    }
+    Ok(toml::from_str::<Token>(&token_str)?)
 }
 
-fn save_to_disk(token: Token) -> Result<Token, anyhow::Error> {
+fn save_to_disk(token: &Token) -> Result<(), anyhow::Error> {
     let path = xdg::BaseDirectories::with_prefix("twt")?.place_cache_file("token")?;
     std::fs::write(path, toml::to_string(&token)?)?;
-    Ok(token)
+    Ok(())
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Default, Serialize, Deserialize)]
 struct TokenRequestBody {
+    #[serde(skip_serializing_if = "String::is_empty")]
     code: String,
+    #[serde(skip_serializing_if = "String::is_empty")]
     grant_type: String,
+    #[serde(skip_serializing_if = "String::is_empty")]
     redirect_uri: String,
+    #[serde(skip_serializing_if = "String::is_empty")]
     code_verifier: String,
+    #[serde(skip_serializing_if = "String::is_empty")]
+    refresh_token: String,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -69,10 +94,11 @@ struct TokenResposeBody {
     token_type: String,
     expires_in: u64,
     access_token: String,
+    refresh_token: Option<String>,
     scope: String,
 }
 
-async fn login(http_client: impl http_client::HttpClient) -> Result<Token, anyhow::Error> {
+async fn login(http_client: &impl http_client::HttpClient) -> Result<Token, anyhow::Error> {
     let redirect_addr = "0.0.0.0:8000";
     let redirect_uri = format!("http://{}", redirect_addr);
 
@@ -89,7 +115,7 @@ async fn login(http_client: impl http_client::HttpClient) -> Result<Token, anyho
         .append_pair("response_type", "code")
         .append_pair("client_id", client_id.as_str())
         .append_pair("redirect_uri", redirect_uri.as_str())
-        .append_pair("scope", "tweet.read users.read")
+        .append_pair("scope", "tweet.read users.read offline.access")
         .append_pair("state", state.as_str())
         .append_pair("code_challenge", pkce_challenge.as_str())
         .append_pair("code_challenge_method", "S256");
@@ -108,6 +134,7 @@ async fn login(http_client: impl http_client::HttpClient) -> Result<Token, anyho
         grant_type: "authorization_code".to_string(),
         redirect_uri,
         code_verifier: String::from_utf8(pkce_verifier)?,
+        ..Default::default()
     };
     let body = http_types::Body::from_form(&req_body).map_err(|e| anyhow!(e))?;
     token_req.set_body(body);
@@ -117,7 +144,11 @@ async fn login(http_client: impl http_client::HttpClient) -> Result<Token, anyho
     let mut token_resp = http_client.send(token_req).await.map_err(|e| anyhow!(e))?;
     let resp_body: TokenResposeBody = token_resp.body_json().await.map_err(|e| anyhow!(e))?;
 
-    Ok(Token::new(resp_body.access_token, resp_body.expires_in))
+    Ok(Token::new(
+        resp_body.access_token,
+        resp_body.refresh_token,
+        resp_body.expires_in,
+    ))
 }
 
 fn receive_redirect(addr: &str) -> Result<(String, String), anyhow::Error> {
@@ -137,6 +168,38 @@ fn receive_redirect(addr: &str) -> Result<(String, String), anyhow::Error> {
         .1;
     request.respond(tiny_http::Response::from_string("done!"))?;
     Ok((String::from(code), String::from(state)))
+}
+
+async fn refresh_token(
+    http_client: &impl http_client::HttpClient,
+    token: Token,
+) -> Result<Token, anyhow::Error> {
+    let client_id = std::env::var("TWT_CLIENT_ID")?;
+    let client_secret = std::env::var("TWT_CLIENT_SECRET")?;
+
+    let mut token_req = http_types::Request::new(http_types::Method::Post, TOKEN_URL);
+    let req_body = TokenRequestBody {
+        grant_type: "refresh_token".to_string(),
+        refresh_token: token
+            .refresh_token()
+            .as_ref()
+            .ok_or(anyhow!("no refresh token"))?
+            .to_string(),
+        ..Default::default()
+    };
+    let body = http_types::Body::from_form(&req_body).map_err(|e| anyhow!(e))?;
+    token_req.set_body(body);
+    let basic_auth = base64::encode(format!("{}:{}", client_id, client_secret));
+    token_req.insert_header("Authorization", format!("Basic {}", basic_auth));
+
+    let mut token_resp = http_client.send(token_req).await.map_err(|e| anyhow!(e))?;
+    let resp_body: TokenResposeBody = token_resp.body_json().await.map_err(|e| anyhow!(e))?;
+
+    Ok(Token::new(
+        resp_body.access_token,
+        resp_body.refresh_token,
+        resp_body.expires_in,
+    ))
 }
 
 fn random_chars(length: usize) -> Vec<u8> {
