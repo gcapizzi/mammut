@@ -5,8 +5,14 @@ mod twitter;
 use futures::executor::block_on;
 
 fn main() -> Result<(), anyhow::Error> {
+    let client_id = std::env::var("TWT_CLIENT_ID")?;
+    let client_secret = std::env::var("TWT_CLIENT_SECRET")?;
     let http_client = http_client::h1::H1Client::new();
-    let token = block_on(oauth::get_access_token(&http_client))?;
+    let oauth_client = oauth::Client::new(
+        &http_client,
+        oauth::Credentials::new(client_id, client_secret),
+    );
+    let token = block_on(oauth_client.get_access_token())?;
     let authenticated_client = http::AuthenticatedClient::new(http_client, token);
     let client = twitter::Client::new(authenticated_client);
 
