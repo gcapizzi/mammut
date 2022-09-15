@@ -1,3 +1,4 @@
+use crate::cache;
 use anyhow::anyhow;
 use serde::{Deserialize, Serialize};
 
@@ -7,8 +8,10 @@ const TOKEN_URL: &str = "https://api.twitter.com/2/oauth2/token";
 const CHARSET: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
 const PASSWORD_LEN: usize = 128;
 
+const CACHE_KEY: &str = "token";
+
 #[derive(Deserialize, Serialize)]
-struct Token {
+pub struct Token {
     access_token: String,
     refresh_token: Option<String>,
     expires_at: std::time::SystemTime,
@@ -34,18 +37,6 @@ impl Token {
     fn is_expired(&self) -> bool {
         self.expires_at <= std::time::SystemTime::now()
     }
-}
-
-fn load_from_disk() -> Result<Token, anyhow::Error> {
-    let path = xdg::BaseDirectories::with_prefix("twt")?.get_cache_file("token");
-    let token_str = std::fs::read_to_string(path)?;
-    Ok(toml::from_str::<Token>(&token_str)?)
-}
-
-fn save_to_disk(token: &Token) -> Result<(), anyhow::Error> {
-    let path = xdg::BaseDirectories::with_prefix("twt")?.place_cache_file("token")?;
-    std::fs::write(path, toml::to_string(&token)?)?;
-    Ok(())
 }
 
 #[derive(Debug, Default, Serialize, Deserialize)]
@@ -82,19 +73,22 @@ impl Credentials {
     }
 }
 
-pub struct Client<'a, H> {
+pub struct Client<'a, H, C> {
     credentials: Credentials,
     http_client: &'a H,
+    cache: C,
 }
 
-impl<'a, H> Client<'a, H>
+impl<'a, H, C> Client<'a, H, C>
 where
     H: http_client::HttpClient,
+    C: cache::Cache<Token>,
 {
-    pub fn new(http_client: &'a H, credentials: Credentials) -> Client<'a, H> {
+    pub fn new(http_client: &'a H, credentials: Credentials, cache: C) -> Client<'a, H, C> {
         Client {
             http_client,
             credentials,
+            cache,
         }
     }
 
@@ -104,21 +98,21 @@ where
     }
 
     async fn get_token(&self) -> Result<Token, anyhow::Error> {
-        if let Ok(t) = load_from_disk() {
+        if let Ok(t) = self.cache.get(CACHE_KEY) {
             if t.is_expired() {
                 let new_t = if let Ok(t) = self.refresh_token(t).await {
                     t
                 } else {
                     self.login().await?
                 };
-                save_to_disk(&new_t)?;
+                self.cache.set(CACHE_KEY, &new_t)?;
                 Ok(new_t)
             } else {
                 return Ok(t);
             }
         } else {
             let new_t = self.login().await?;
-            save_to_disk(&new_t)?;
+            self.cache.set(CACHE_KEY, &new_t)?;
             Ok(new_t)
         }
     }
