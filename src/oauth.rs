@@ -1,4 +1,4 @@
-use crate::cache;
+use crate::{cache, io};
 use anyhow::anyhow;
 use serde::{Deserialize, Serialize};
 
@@ -73,22 +73,30 @@ impl Credentials {
     }
 }
 
-pub struct Client<'a, H, C> {
+pub struct Client<'a, H, C, U> {
     credentials: Credentials,
     http_client: &'a H,
     cache: C,
+    user_interface: U,
 }
 
-impl<'a, H, C> Client<'a, H, C>
+impl<'a, H, C, U> Client<'a, H, C, U>
 where
     H: http_client::HttpClient,
     C: cache::Cache<Token>,
+    U: io::UserInterface,
 {
-    pub fn new(http_client: &'a H, credentials: Credentials, cache: C) -> Client<'a, H, C> {
+    pub fn new(
+        http_client: &'a H,
+        credentials: Credentials,
+        cache: C,
+        user_interface: U,
+    ) -> Client<'a, H, C, U> {
         Client {
             http_client,
             credentials,
             cache,
+            user_interface,
         }
     }
 
@@ -136,7 +144,8 @@ where
             .append_pair("code_challenge", pkce_challenge.as_str())
             .append_pair("code_challenge_method", "S256");
 
-        println!("Browse to: {}", auth_url);
+        self.user_interface
+            .println(format!("Browse to: {}", auth_url).as_str());
 
         let (code, received_state) = receive_redirect(redirect_addr)?;
 
