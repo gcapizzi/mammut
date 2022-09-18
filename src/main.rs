@@ -10,11 +10,13 @@ fn main() -> Result<(), anyhow::Error> {
     let client_id = std::env::var("TWT_CLIENT_ID")?;
     let client_secret = std::env::var("TWT_CLIENT_SECRET")?;
     let http_client = http_client::h1::H1Client::new();
+    let http_receiver = http::AsyncH1Receiver::new();
     let cache = cache::XDG::new("twt".to_string());
     let user_interface = io::Console::new();
     let oauth_client = oauth::Client::new(
         oauth::Credentials::new(client_id, client_secret),
         &http_client,
+        http_receiver,
         cache,
         user_interface,
     );

@@ -1,4 +1,4 @@
-use crate::{cache, io};
+use crate::{cache, http, io};
 use anyhow::anyhow;
 use serde::{Deserialize, Serialize};
 
@@ -73,28 +73,32 @@ impl Credentials {
     }
 }
 
-pub struct Client<'a, H, C, U> {
+pub struct Client<'a, H, R, C, U> {
     credentials: Credentials,
     http_client: &'a H,
+    http_receiver: R,
     cache: C,
     user_interface: U,
 }
 
-impl<'a, H, C, U> Client<'a, H, C, U>
+impl<'a, H, R, C, U> Client<'a, H, R, C, U>
 where
     H: http_client::HttpClient,
+    R: http::Receiver,
     C: cache::Cache<Token>,
     U: io::UserInterface,
 {
     pub fn new(
         credentials: Credentials,
         http_client: &'a H,
+        http_receiver: R,
         cache: C,
         user_interface: U,
-    ) -> Client<'a, H, C, U> {
+    ) -> Client<'a, H, R, C, U> {
         Client {
             credentials,
             http_client,
+            http_receiver,
             cache,
             user_interface,
         }
@@ -147,7 +151,7 @@ where
         self.user_interface
             .println(format!("Browse to: {}", auth_url).as_str());
 
-        let (code, received_state) = receive_redirect(redirect_addr)?;
+        let (code, received_state) = self.receive_redirect(redirect_addr).await?;
 
         if received_state != state {
             return Err(anyhow!("wrong state!"));
@@ -215,25 +219,26 @@ where
             resp_body.expires_in,
         ))
     }
-}
 
-fn receive_redirect(addr: &str) -> Result<(String, String), anyhow::Error> {
-    let server = tiny_http::Server::http(addr).unwrap();
-    let request = server.recv()?;
-    let url = url::Url::parse("http://base")?.join(request.url())?;
-    let query = url.query_pairs();
-    let code = query
-        .into_iter()
-        .find(|(k, _)| k == "code")
-        .ok_or(anyhow!("no `code`!"))?
-        .1;
-    let state = query
-        .into_iter()
-        .find(|(k, _)| k == "state")
-        .ok_or(anyhow!("no `state`!"))?
-        .1;
-    request.respond(tiny_http::Response::from_string("done!"))?;
-    Ok((String::from(code), String::from(state)))
+    async fn receive_redirect(&self, addr: &str) -> Result<(String, String), anyhow::Error> {
+        let request = self
+            .http_receiver
+            .receive(addr.parse()?)
+            .await
+            .map_err(|e| anyhow!(e))?;
+        let query = request.url().query_pairs();
+        let code = query
+            .into_iter()
+            .find(|(k, _)| k == "code")
+            .ok_or(anyhow!("no `code`!"))?
+            .1;
+        let state = query
+            .into_iter()
+            .find(|(k, _)| k == "state")
+            .ok_or(anyhow!("no `state`!"))?
+            .1;
+        Ok((String::from(code), String::from(state)))
+    }
 }
 
 fn random_chars(length: usize) -> Vec<u8> {
