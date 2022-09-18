@@ -87,14 +87,14 @@ where
     U: io::UserInterface,
 {
     pub fn new(
-        http_client: &'a H,
         credentials: Credentials,
+        http_client: &'a H,
         cache: C,
         user_interface: U,
     ) -> Client<'a, H, C, U> {
         Client {
-            http_client,
             credentials,
+            http_client,
             cache,
             user_interface,
         }

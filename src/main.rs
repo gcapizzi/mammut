@@ -13,8 +13,8 @@ fn main() -> Result<(), anyhow::Error> {
     let cache = cache::XDG::new("twt".to_string());
     let user_interface = io::Console::new();
     let oauth_client = oauth::Client::new(
-        &http_client,
         oauth::Credentials::new(client_id, client_secret),
+        &http_client,
         cache,
         user_interface,
     );
