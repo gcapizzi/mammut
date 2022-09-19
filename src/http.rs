@@ -1,11 +1,11 @@
 use async_trait::async_trait;
 
+const ADDRESS: &str = "0.0.0.0:8000";
+
 #[async_trait]
 pub trait Receiver {
-    async fn receive(
-        &self,
-        address: async_std::net::SocketAddr,
-    ) -> Result<http_types::Request, http_types::Error>;
+    fn url(&self) -> url::Url;
+    async fn receive(&self) -> Result<http_types::Request, http_types::Error>;
 }
 
 pub struct AsyncH1Receiver {}
@@ -18,11 +18,12 @@ impl AsyncH1Receiver {
 
 #[async_trait]
 impl Receiver for AsyncH1Receiver {
-    async fn receive(
-        &self,
-        address: async_std::net::SocketAddr,
-    ) -> Result<http_types::Request, http_types::Error> {
-        let listener = async_std::net::TcpListener::bind(address).await?;
+    fn url(&self) -> url::Url {
+        url::Url::parse(ADDRESS).unwrap()
+    }
+
+    async fn receive(&self) -> Result<http_types::Request, http_types::Error> {
+        let listener = async_std::net::TcpListener::bind(ADDRESS).await?;
         let (mut stream, _) = listener.accept().await?;
         let (request, _) = async_h1::server::decode(stream.clone()).await?.unwrap();
         let mut response = http_types::Response::new(http_types::StatusCode::Ok);

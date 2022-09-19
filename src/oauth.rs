@@ -130,9 +130,7 @@ where
     }
 
     async fn login(&self) -> Result<Token, anyhow::Error> {
-        let redirect_addr = "0.0.0.0:8000";
-        let redirect_uri = format!("http://{}", redirect_addr);
-
+        let redirect_uri = self.http_receiver.url();
         let pkce_verifier = random_chars(PASSWORD_LEN);
         let pkce_challenge = base64::encode_config(sha256(&pkce_verifier), base64::URL_SAFE_NO_PAD);
         let state = random_string(PASSWORD_LEN)?;
@@ -151,7 +149,7 @@ where
         self.user_interface
             .println(format!("Browse to: {}", auth_url).as_str());
 
-        let (code, received_state) = self.receive_redirect(redirect_addr).await?;
+        let (code, received_state) = self.receive_redirect().await?;
 
         if received_state != state {
             return Err(anyhow!("wrong state!"));
@@ -161,7 +159,7 @@ where
         let req_body = TokenRequestBody {
             code,
             grant_type: "authorization_code".to_string(),
-            redirect_uri,
+            redirect_uri: redirect_uri.to_string(),
             code_verifier: String::from_utf8(pkce_verifier)?,
             ..Default::default()
         };
@@ -220,12 +218,8 @@ where
         ))
     }
 
-    async fn receive_redirect(&self, addr: &str) -> Result<(String, String), anyhow::Error> {
-        let request = self
-            .http_receiver
-            .receive(addr.parse()?)
-            .await
-            .map_err(|e| anyhow!(e))?;
+    async fn receive_redirect(&self) -> Result<(String, String), anyhow::Error> {
+        let request = self.http_receiver.receive().await.map_err(|e| anyhow!(e))?;
         let query = request.url().query_pairs();
         let code = query
             .into_iter()
