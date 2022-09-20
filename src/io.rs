@@ -1,17 +1,17 @@
-pub trait UserInterface {
-    fn println(&self, s: &str);
+pub trait Display {
+    fn url(&self, s: &url::Url);
 }
 
-pub struct Console {}
+pub struct TerminalDisplay {}
 
-impl Console {
-    pub fn new() -> Console {
-        Console {}
+impl TerminalDisplay {
+    pub fn new() -> TerminalDisplay {
+        TerminalDisplay {}
     }
 }
 
-impl UserInterface for Console {
-    fn println(&self, s: &str) {
-        println!("{}", s);
+impl Display for TerminalDisplay {
+    fn url(&self, url: &url::Url) {
+        println!("{}", url);
     }
 }

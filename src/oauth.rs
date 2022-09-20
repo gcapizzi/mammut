@@ -78,7 +78,7 @@ pub struct Client<'a, H, R, C, U> {
     http_client: &'a H,
     http_receiver: R,
     cache: C,
-    user_interface: U,
+    display: U,
 }
 
 impl<'a, H, R, C, U> Client<'a, H, R, C, U>
@@ -86,21 +86,21 @@ where
     H: http_client::HttpClient,
     R: http::Receiver,
     C: cache::Cache<Token>,
-    U: io::UserInterface,
+    U: io::Display,
 {
     pub fn new(
         credentials: Credentials,
         http_client: &'a H,
         http_receiver: R,
         cache: C,
-        user_interface: U,
+        display: U,
     ) -> Client<'a, H, R, C, U> {
         Client {
             credentials,
             http_client,
             http_receiver,
             cache,
-            user_interface,
+            display,
         }
     }
 
@@ -146,8 +146,7 @@ where
             .append_pair("code_challenge", pkce_challenge.as_str())
             .append_pair("code_challenge_method", "S256");
 
-        self.user_interface
-            .println(format!("Browse to: {}", auth_url).as_str());
+        self.display.url(&auth_url);
 
         let (code, received_state) = self.receive_redirect().await?;
 
