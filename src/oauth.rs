@@ -1,5 +1,6 @@
-use crate::{cache, http, io};
+use crate::cache;
 use anyhow::anyhow;
+use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 
 const AUTH_URL: &str = "https://twitter.com/i/oauth2/authorize";
@@ -9,6 +10,8 @@ const CHARSET: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz012
 const PASSWORD_LEN: usize = 128;
 
 const CACHE_KEY: &str = "token";
+
+const REDIRECT_ADDRESS: &str = "0.0.0.0:8000";
 
 #[derive(Deserialize, Serialize)]
 pub struct Token {
@@ -73,34 +76,66 @@ impl Credentials {
     }
 }
 
-pub struct Client<'a, H, R, C, U> {
-    credentials: Credentials,
-    http_client: &'a H,
-    http_receiver: R,
-    cache: C,
-    display: U,
+#[async_trait]
+pub trait Authenticator {
+    fn url(&self) -> url::Url;
+    async fn authenticate_user(&self, auth_url: &url::Url) -> Result<url::Url, anyhow::Error>;
 }
 
-impl<'a, H, R, C, U> Client<'a, H, R, C, U>
+pub struct AsyncH1Authenticator {}
+
+impl AsyncH1Authenticator {
+    pub fn new() -> AsyncH1Authenticator {
+        AsyncH1Authenticator {}
+    }
+}
+
+#[async_trait]
+impl Authenticator for AsyncH1Authenticator {
+    fn url(&self) -> url::Url {
+        url::Url::parse(REDIRECT_ADDRESS).unwrap()
+    }
+
+    async fn authenticate_user(&self, auth_url: &url::Url) -> Result<url::Url, anyhow::Error> {
+        println!("{}", &auth_url);
+        let listener = async_std::net::TcpListener::bind(REDIRECT_ADDRESS).await?;
+        let (mut stream, _) = listener.accept().await?;
+        let (request, _) = async_h1::server::decode(stream.clone())
+            .await
+            .map_err(|e| anyhow!(e))?
+            .ok_or(anyhow!("no request :/"))?;
+        let mut response = http_types::Response::new(http_types::StatusCode::Ok);
+        response.set_body("done!");
+        let mut response_encoder = async_h1::server::Encoder::new(response, request.method());
+        async_std::io::copy(&mut response_encoder, &mut stream).await?;
+        Ok(request.url().clone())
+    }
+}
+
+pub struct Client<'a, H, A, C> {
+    credentials: Credentials,
+    http_client: &'a H,
+    authenticator: A,
+    cache: C,
+}
+
+impl<'a, H, A, C> Client<'a, H, A, C>
 where
     H: http_client::HttpClient,
-    R: http::Receiver,
+    A: Authenticator,
     C: cache::Cache<Token>,
-    U: io::Display,
 {
     pub fn new(
         credentials: Credentials,
         http_client: &'a H,
-        http_receiver: R,
+        authenticator: A,
         cache: C,
-        display: U,
-    ) -> Client<'a, H, R, C, U> {
+    ) -> Client<'a, H, A, C> {
         Client {
             credentials,
             http_client,
-            http_receiver,
+            authenticator,
             cache,
-            display,
         }
     }
 
@@ -130,7 +165,7 @@ where
     }
 
     async fn login(&self) -> Result<Token, anyhow::Error> {
-        let redirect_uri = self.http_receiver.url();
+        let redirect_uri = self.authenticator.url();
         let pkce_verifier = random_chars(PASSWORD_LEN);
         let pkce_challenge = base64::encode_config(sha256(&pkce_verifier), base64::URL_SAFE_NO_PAD);
         let state = random_string(PASSWORD_LEN)?;
@@ -146,9 +181,14 @@ where
             .append_pair("code_challenge", pkce_challenge.as_str())
             .append_pair("code_challenge_method", "S256");
 
-        self.display.url(&auth_url);
+        let redirect_url = self
+            .authenticator
+            .authenticate_user(&auth_url)
+            .await
+            .map_err(|e| anyhow!(e))?;
 
-        let (code, received_state) = self.receive_redirect().await?;
+        let code = get_query_param(&redirect_url, "code")?;
+        let received_state = get_query_param(&redirect_url, "state")?;
 
         if received_state != state {
             return Err(anyhow!("wrong state!"));
@@ -216,22 +256,16 @@ where
             resp_body.expires_in,
         ))
     }
+}
 
-    async fn receive_redirect(&self) -> Result<(String, String), anyhow::Error> {
-        let request = self.http_receiver.receive().await.map_err(|e| anyhow!(e))?;
-        let query = request.url().query_pairs();
-        let code = query
-            .into_iter()
-            .find(|(k, _)| k == "code")
-            .ok_or(anyhow!("no `code`!"))?
-            .1;
-        let state = query
-            .into_iter()
-            .find(|(k, _)| k == "state")
-            .ok_or(anyhow!("no `state`!"))?
-            .1;
-        Ok((String::from(code), String::from(state)))
-    }
+fn get_query_param(url: &url::Url, key: &str) -> Result<String, anyhow::Error> {
+    Ok(url
+        .query_pairs()
+        .into_iter()
+        .find(|(k, _)| k == key)
+        .ok_or(anyhow!("no `{}`!", key))?
+        .1
+        .to_string())
 }
 
 fn random_chars(length: usize) -> Vec<u8> {
