@@ -11,7 +11,7 @@ const PASSWORD_LEN: usize = 128;
 
 const CACHE_KEY: &str = "token";
 
-const REDIRECT_ADDRESS: &str = "0.0.0.0:8000";
+const REDIRECT_URL: &str = "http://0.0.0.0:8000";
 
 #[derive(Deserialize, Serialize)]
 pub struct Token {
@@ -78,7 +78,6 @@ impl Credentials {
 
 #[async_trait]
 pub trait Authenticator {
-    fn url(&self) -> url::Url;
     async fn authenticate_user(&self, auth_url: &url::Url) -> Result<url::Url, anyhow::Error>;
 }
 
@@ -92,13 +91,18 @@ impl AsyncH1Authenticator {
 
 #[async_trait]
 impl Authenticator for AsyncH1Authenticator {
-    fn url(&self) -> url::Url {
-        url::Url::parse(REDIRECT_ADDRESS).unwrap()
-    }
-
     async fn authenticate_user(&self, auth_url: &url::Url) -> Result<url::Url, anyhow::Error> {
         println!("{}", &auth_url);
-        let listener = async_std::net::TcpListener::bind(REDIRECT_ADDRESS).await?;
+
+        let redirect_url = url::Url::parse(get_query_param(auth_url, "redirect_uri")?.as_str())?;
+        let redirect_host = redirect_url
+            .host_str()
+            .ok_or(anyhow!("{} has no host to listen from", REDIRECT_URL))?;
+        let redirect_port = redirect_url
+            .port_or_known_default()
+            .ok_or(anyhow!("{} should use http or https", REDIRECT_URL))?;
+        let redirect_listen_addr = format!("{}:{}", redirect_host, redirect_port);
+        let listener = async_std::net::TcpListener::bind(redirect_listen_addr).await?;
         let (mut stream, _) = listener.accept().await?;
         let (request, _) = async_h1::server::decode(stream.clone())
             .await
@@ -165,7 +169,6 @@ where
     }
 
     async fn login(&self) -> Result<Token, anyhow::Error> {
-        let redirect_uri = self.authenticator.url();
         let pkce_verifier = random_chars(PASSWORD_LEN);
         let pkce_challenge = base64::encode_config(sha256(&pkce_verifier), base64::URL_SAFE_NO_PAD);
         let state = random_string(PASSWORD_LEN)?;
@@ -175,7 +178,7 @@ where
             .query_pairs_mut()
             .append_pair("response_type", "code")
             .append_pair("client_id", self.credentials.id.as_str())
-            .append_pair("redirect_uri", redirect_uri.as_str())
+            .append_pair("redirect_uri", REDIRECT_URL)
             .append_pair("scope", "tweet.read users.read offline.access")
             .append_pair("state", state.as_str())
             .append_pair("code_challenge", pkce_challenge.as_str())
@@ -198,7 +201,7 @@ where
         let req_body = TokenRequestBody {
             code,
             grant_type: "authorization_code".to_string(),
-            redirect_uri: redirect_uri.to_string(),
+            redirect_uri: REDIRECT_URL.to_string(),
             code_verifier: String::from_utf8(pkce_verifier)?,
             ..Default::default()
         };
