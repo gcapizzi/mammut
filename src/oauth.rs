@@ -119,8 +119,8 @@ impl Authenticator for AsyncH1Authenticator {
 pub struct Client<'a, H, A, C> {
     credentials: Credentials,
     http_client: &'a H,
-    authenticator: A,
-    cache: C,
+    authenticator: &'a A,
+    cache: &'a C,
 }
 
 impl<'a, H, A, C> Client<'a, H, A, C>
@@ -132,8 +132,8 @@ where
     pub fn new(
         credentials: Credentials,
         http_client: &'a H,
-        authenticator: A,
-        cache: C,
+        authenticator: &'a A,
+        cache: &'a C,
     ) -> Client<'a, H, A, C> {
         Client {
             credentials,

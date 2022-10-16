@@ -14,8 +14,8 @@ fn main() -> Result<(), anyhow::Error> {
     let oauth_client = oauth::Client::new(
         oauth::Credentials::new(client_id, client_secret),
         &http_client,
-        authenticator,
-        cache,
+        &authenticator,
+        &cache,
     );
     let token = block_on(oauth_client.get_access_token())?;
     let authenticated_client = http::AuthenticatedClient::new(http_client, token);
