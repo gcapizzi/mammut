@@ -2,6 +2,7 @@ use crate::cache;
 use anyhow::anyhow;
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 
 const AUTH_URL: &str = "https://twitter.com/i/oauth2/authorize";
 const TOKEN_URL: &str = "https://api.twitter.com/2/oauth2/token";
@@ -94,7 +95,11 @@ impl Authenticator for AsyncH1Authenticator {
     async fn authenticate_user(&self, auth_url: &url::Url) -> Result<url::Url, anyhow::Error> {
         println!("{}", &auth_url);
 
-        let redirect_url = url::Url::parse(get_query_param(auth_url, "redirect_uri")?.as_str())?;
+        let auth_url_params: HashMap<_, _> = auth_url.query_pairs().into_owned().collect();
+        let redirect_uri = auth_url_params
+            .get("redirect_uri")
+            .ok_or(anyhow!("no `redirect_uri`"))?;
+        let redirect_url = url::Url::parse(redirect_uri)?;
         let redirect_host = redirect_url
             .host_str()
             .ok_or(anyhow!("{} has no host to listen from", REDIRECT_URL))?;
@@ -190,16 +195,21 @@ where
             .await
             .map_err(|e| anyhow!(e))?;
 
-        let code = get_query_param(&redirect_url, "code")?;
-        let received_state = get_query_param(&redirect_url, "state")?;
+        let redirect_url_params: HashMap<_, _> = redirect_url.query_pairs().into_owned().collect();
+        let code = redirect_url_params
+            .get("code")
+            .ok_or(anyhow!("no `code`"))?;
+        let received_state = redirect_url_params
+            .get("state")
+            .ok_or(anyhow!("no `state`"))?;
 
-        if received_state != state {
+        if received_state != &state {
             return Err(anyhow!("wrong state!"));
         }
 
         let mut token_req = http_types::Request::new(http_types::Method::Post, TOKEN_URL);
         let req_body = TokenRequestBody {
-            code,
+            code: code.to_string(),
             grant_type: "authorization_code".to_string(),
             redirect_uri: REDIRECT_URL.to_string(),
             code_verifier: String::from_utf8(pkce_verifier)?,
@@ -259,16 +269,6 @@ where
             resp_body.expires_in,
         ))
     }
-}
-
-fn get_query_param(url: &url::Url, key: &str) -> Result<String, anyhow::Error> {
-    Ok(url
-        .query_pairs()
-        .into_iter()
-        .find(|(k, _)| k == key)
-        .ok_or(anyhow!("no `{}`!", key))?
-        .1
-        .to_string())
 }
 
 fn random_chars(length: usize) -> Vec<u8> {
