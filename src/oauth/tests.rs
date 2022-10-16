@@ -2,7 +2,10 @@ mod mock;
 
 use crate::cache::Cache;
 use crate::oauth;
-use expect::{expect, matchers::equal};
+use expect::{
+    expect,
+    matchers::{equal, option::be_none},
+};
 use futures::executor::block_on;
 use std::collections::HashMap;
 
@@ -43,10 +46,27 @@ async fn when_the_token_is_not_cached_it_logins_and_saves_the_token() {
     let code_verifier = token_req_map.get("code_verifier").unwrap();
     expect(&code_challenge).to(equal(&sha256(code_verifier)));
 
-    let cached_token = cache.get(oauth::CACHE_KEY).unwrap();
+    let cached_token = cache.get("token").unwrap();
     expect(&cached_token.access_token()).to(equal(&"ACCESS_TOKEN".to_string()));
     expect(&cached_token.refresh_token()).to(equal(&Some("REFRESH_TOKEN".to_string())));
     expect(&cached_token.is_expired()).to(equal(false));
+}
+
+#[async_std::test]
+async fn when_the_token_is_cached_and_not_expired_it_returns_it() {
+    let credentials = oauth::Credentials::new(String::new(), String::new());
+    let authenticator = mock::Authenticator::new(String::new());
+    let http_client = mock::HttpClient::new();
+    let token = oauth::Token::new("CACHED_ACCESS_TOKEN".to_string(), None, 1);
+    let cache = mock::Cache::new(HashMap::from([("token".to_string(), token.clone())]));
+
+    let client = oauth::Client::new(credentials, &http_client, &authenticator, &cache);
+
+    expect(&client.get_access_token().await.unwrap()).to(equal("CACHED_ACCESS_TOKEN".to_string()));
+
+    expect(&authenticator.last_auth_url()).to(be_none());
+    expect(&http_client.last_request()).to(be_none());
+    expect(&cache.get("token").unwrap()).to(equal(token));
 }
 
 fn sha256(data: &str) -> String {
