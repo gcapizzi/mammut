@@ -29,6 +29,8 @@ async fn when_the_token_is_not_cached_it_logins_and_saves_the_token() {
     expect(&auth_url_params.get("code_challenge_method")).to(equal(Some(&"S256".to_string())));
 
     let redirect_url = auth_url_params.get("redirect_uri").unwrap();
+    expect(&redirect_url).to(equal("http://0.0.0.0:8000"));
+
     let code_challenge = auth_url_params.get("code_challenge").unwrap();
 
     let mut token_req = http_client.last_request().unwrap();
