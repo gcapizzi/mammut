@@ -100,14 +100,8 @@ impl Authenticator for AsyncH1Authenticator {
             .get("redirect_uri")
             .ok_or(anyhow!("no `redirect_uri`"))?;
         let redirect_url = url::Url::parse(redirect_uri)?;
-        let redirect_host = redirect_url
-            .host_str()
-            .ok_or(anyhow!("{} has no host to listen from", REDIRECT_URL))?;
-        let redirect_port = redirect_url
-            .port_or_known_default()
-            .ok_or(anyhow!("{} should use http or https", REDIRECT_URL))?;
-        let redirect_listen_addr = format!("{}:{}", redirect_host, redirect_port);
-        let listener = async_std::net::TcpListener::bind(redirect_listen_addr).await?;
+        let addrs = redirect_url.socket_addrs(|| None)?;
+        let listener = async_std::net::TcpListener::bind(&*addrs).await?;
         let (mut stream, _) = listener.accept().await?;
         let (request, _) = async_h1::server::decode(stream.clone())
             .await
