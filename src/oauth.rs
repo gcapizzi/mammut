@@ -14,7 +14,7 @@ const CACHE_KEY: &str = "token";
 
 const REDIRECT_URL: &str = "http://0.0.0.0:8000";
 
-#[derive(Deserialize, Serialize)]
+#[derive(PartialEq, Debug, Deserialize, Serialize, Clone)]
 pub struct Token {
     access_token: String,
     refresh_token: Option<String>,
@@ -286,3 +286,6 @@ fn sha256(data: impl AsRef<[u8]>) -> impl AsRef<[u8]> {
     hasher.update(&data);
     hasher.finalize()
 }
+
+#[cfg(test)]
+mod tests;
