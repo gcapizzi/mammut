@@ -201,42 +201,18 @@ where
             return Err(anyhow!("wrong state!"));
         }
 
-        let mut token_req = http_types::Request::new(http_types::Method::Post, TOKEN_URL);
-        let req_body = TokenRequestBody {
+        self.token(TokenRequestBody {
             code: code.to_string(),
             grant_type: "authorization_code".to_string(),
             redirect_uri: REDIRECT_URL.to_string(),
             code_verifier: String::from_utf8(pkce_verifier)?,
             ..Default::default()
-        };
-        let body = http_types::Body::from_form(&req_body).map_err(|e| anyhow!(e))?;
-        token_req.set_body(body);
-        let basic_auth = base64::encode(format!(
-            "{}:{}",
-            self.credentials.id, self.credentials.secret
-        ));
-        token_req.insert_header("Authorization", format!("Basic {}", basic_auth));
-
-        let mut token_resp = self
-            .http_client
-            .send(token_req)
-            .await
-            .map_err(|e| anyhow!(e))?;
-        let resp_body: TokenResposeBody = token_resp.body_json().await.map_err(|e| anyhow!(e))?;
-
-        Ok(Token::new(
-            resp_body.access_token,
-            resp_body.refresh_token,
-            resp_body.expires_in,
-        ))
+        })
+        .await
     }
 
     async fn refresh_token(&self, token: Token) -> Result<Token, anyhow::Error> {
-        let client_id = std::env::var("TWT_CLIENT_ID")?;
-        let client_secret = std::env::var("TWT_CLIENT_SECRET")?;
-
-        let mut token_req = http_types::Request::new(http_types::Method::Post, TOKEN_URL);
-        let req_body = TokenRequestBody {
+        self.token(TokenRequestBody {
             grant_type: "refresh_token".to_string(),
             refresh_token: token
                 .refresh_token()
@@ -244,10 +220,18 @@ where
                 .ok_or(anyhow!("no refresh token"))?
                 .to_string(),
             ..Default::default()
-        };
+        })
+        .await
+    }
+
+    async fn token(&self, req_body: TokenRequestBody) -> Result<Token, anyhow::Error> {
+        let mut token_req = http_types::Request::new(http_types::Method::Post, TOKEN_URL);
         let body = http_types::Body::from_form(&req_body).map_err(|e| anyhow!(e))?;
         token_req.set_body(body);
-        let basic_auth = base64::encode(format!("{}:{}", client_id, client_secret));
+        let basic_auth = base64::encode(format!(
+            "{}:{}",
+            self.credentials.id, self.credentials.secret
+        ));
         token_req.insert_header("Authorization", format!("Basic {}", basic_auth));
 
         let mut token_resp = self
