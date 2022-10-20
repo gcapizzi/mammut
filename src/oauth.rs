@@ -1,4 +1,3 @@
-use crate::cache;
 use anyhow::{anyhow, bail, Result};
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
@@ -107,6 +106,36 @@ impl Authenticator for AsyncH1Authenticator {
     }
 }
 
+pub trait TokenCache {
+    fn set(&self, value: &Token) -> Result<()>;
+    fn get(&self) -> Result<Token>;
+}
+
+pub struct XDGTokenCache {
+    prefix: String,
+}
+
+impl XDGTokenCache {
+    pub fn new(prefix: String) -> XDGTokenCache {
+        XDGTokenCache { prefix }
+    }
+}
+
+impl TokenCache for XDGTokenCache {
+    fn get(&self) -> Result<Token> {
+        let path = xdg::BaseDirectories::with_prefix(&self.prefix)?.get_cache_file(CACHE_KEY);
+        let value_file = std::fs::File::open(path)?;
+        Ok(serde_json::from_reader(&value_file)?)
+    }
+
+    fn set(&self, value: &Token) -> Result<()> {
+        let path = xdg::BaseDirectories::with_prefix(&self.prefix)?.place_cache_file(CACHE_KEY)?;
+        let value_file = std::fs::File::create(path)?;
+        serde_json::to_writer(&value_file, &value)?;
+        Ok(())
+    }
+}
+
 pub struct Client<'a, H, A, C> {
     http_client: &'a H,
     authenticator: &'a A,
@@ -118,7 +147,7 @@ impl<'a, H, A, C> Client<'a, H, A, C>
 where
     H: http_client::HttpClient,
     A: Authenticator,
-    C: cache::Cache<Token>,
+    C: TokenCache,
 {
     pub fn new(
         http_client: &'a H,
@@ -140,21 +169,21 @@ where
     }
 
     async fn get_token(&self) -> Result<Token> {
-        if let Ok(t) = self.cache.get(CACHE_KEY) {
+        if let Ok(t) = self.cache.get() {
             if t.is_expired() {
                 let new_t = if let Ok(t) = self.refresh_token(t).await {
                     t
                 } else {
                     self.login().await?
                 };
-                self.cache.set(CACHE_KEY, &new_t)?;
+                self.cache.set(&new_t)?;
                 Ok(new_t)
             } else {
                 return Ok(t);
             }
         } else {
             let new_t = self.login().await?;
-            self.cache.set(CACHE_KEY, &new_t)?;
+            self.cache.set(&new_t)?;
             Ok(new_t)
         }
     }

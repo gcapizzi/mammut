@@ -81,28 +81,33 @@ impl crate::oauth::Authenticator for Authenticator {
     }
 }
 
-pub struct Cache<T> {
-    map: std::sync::Mutex<std::collections::HashMap<String, T>>,
+pub struct TokenCache {
+    value: std::sync::Mutex<Option<crate::oauth::Token>>,
 }
 
-impl<T> Cache<T> {
-    pub fn new(map: std::collections::HashMap<String, T>) -> Cache<T> {
-        Cache {
-            map: std::sync::Mutex::new(map),
+impl TokenCache {
+    pub fn empty() -> TokenCache {
+        TokenCache {
+            value: std::sync::Mutex::new(None),
+        }
+    }
+
+    pub fn with_value(value: crate::oauth::Token) -> TokenCache {
+        TokenCache {
+            value: std::sync::Mutex::new(Some(value)),
         }
     }
 }
 
-impl<T: Clone> crate::cache::Cache<T> for Cache<T> {
-    fn get(&self, key: &str) -> Result<T> {
-        let map = self.map.lock().unwrap();
-        let value = map.get(key).ok_or(anyhow!("{} not found", key))?;
-        Ok(value.clone())
+impl crate::oauth::TokenCache for TokenCache {
+    fn get(&self) -> Result<crate::oauth::Token> {
+        let token = self.value.lock().unwrap();
+        token.clone().ok_or(anyhow!("no token"))
     }
 
-    fn set(&self, key: &str, value: &T) -> Result<()> {
-        let mut map = self.map.lock().unwrap();
-        map.insert(key.to_string(), value.clone());
+    fn set(&self, value: &crate::oauth::Token) -> Result<()> {
+        let mut token = self.value.lock().unwrap();
+        *token = Some(value.clone());
         Ok(())
     }
 }

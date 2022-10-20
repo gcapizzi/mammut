@@ -1,4 +1,3 @@
-mod cache;
 mod http;
 mod oauth;
 mod twitter;
@@ -12,7 +11,7 @@ fn main() -> Result<()> {
 
     let http_client = http_client::h1::H1Client::new();
     let authenticator = oauth::AsyncH1Authenticator::new();
-    let cache = cache::XDG::new("twt".to_string());
+    let cache = oauth::XDGTokenCache::new("twt".to_string());
     let oauth_client = oauth::Client::new(
         &http_client,
         &authenticator,
