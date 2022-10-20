@@ -11,17 +11,28 @@ use std::collections::HashMap;
 
 #[async_std::test]
 async fn when_the_token_is_not_cached_it_logins_and_saves_the_token() {
-    let credentials = oauth::Credentials::new("id".to_string(), "secret".to_string());
-
     let authenticator = mock::Authenticator::new("the-auth-code".to_string());
     let http_client = mock::HttpClient::new();
     let cache = mock::Cache::new(HashMap::new());
 
-    let client = oauth::Client::new(credentials, &http_client, &authenticator, &cache);
+    let client = oauth::Client::new(
+        &http_client,
+        &authenticator,
+        &cache,
+        oauth::Config {
+            client_id: "id",
+            client_secret: "secret",
+            auth_url: "https://the-auth-url",
+            token_url: "https://the-token-url",
+            redirect_url: "https://the-redirect-url",
+        },
+    );
 
     expect(&client.get_access_token().await.unwrap()).to(equal("ACCESS_TOKEN".to_string()));
 
     let auth_url = authenticator.last_auth_url().unwrap();
+    expect(&auth_url.origin().unicode_serialization()).to(equal("https://the-auth-url"));
+
     let auth_url_params: HashMap<_, _> = auth_url.query_pairs().into_owned().collect();
     expect(auth_url_params.get("response_type").unwrap()).to(equal("code"));
     expect(auth_url_params.get("client_id").unwrap()).to(equal("id"));
@@ -29,11 +40,13 @@ async fn when_the_token_is_not_cached_it_logins_and_saves_the_token() {
     expect(&auth_url_params.get("code_challenge_method")).to(equal(Some(&"S256".to_string())));
 
     let redirect_url = auth_url_params.get("redirect_uri").unwrap();
-    expect(&redirect_url).to(equal("http://0.0.0.0:8000"));
+    expect(&redirect_url).to(equal("https://the-redirect-url"));
 
     let code_challenge = auth_url_params.get("code_challenge").unwrap();
 
     let mut token_req = http_client.last_request().unwrap();
+
+    expect(&token_req.url().origin().unicode_serialization()).to(equal("https://the-token-url"));
 
     // base64("id:secret") = "aWQ6c2VjcmV0"
     expect(token_req.header("Authorization").unwrap()).to(equal("Basic aWQ6c2VjcmV0"));
@@ -56,13 +69,23 @@ async fn when_the_token_is_not_cached_it_logins_and_saves_the_token() {
 
 #[async_std::test]
 async fn when_the_token_is_cached_and_not_expired_it_returns_it() {
-    let credentials = oauth::Credentials::new(String::new(), String::new());
     let authenticator = mock::Authenticator::new(String::new());
     let http_client = mock::HttpClient::new();
     let token = oauth::Token::new("CACHED_ACCESS_TOKEN".to_string(), None, 1);
     let cache = mock::Cache::new(HashMap::from([("token".to_string(), token.clone())]));
 
-    let client = oauth::Client::new(credentials, &http_client, &authenticator, &cache);
+    let client = oauth::Client::new(
+        &http_client,
+        &authenticator,
+        &cache,
+        oauth::Config {
+            client_id: "id",
+            client_secret: "secret",
+            auth_url: "https://the-auth-url",
+            token_url: "https://the-token-url",
+            redirect_url: "https://the-redirect-url",
+        },
+    );
 
     expect(&client.get_access_token().await.unwrap()).to(equal("CACHED_ACCESS_TOKEN".to_string()));
 
@@ -73,8 +96,6 @@ async fn when_the_token_is_cached_and_not_expired_it_returns_it() {
 
 #[async_std::test]
 async fn when_the_token_is_cached_but_expired_and_refreshable_it_refreshes_it_and_saves_it() {
-    let credentials = oauth::Credentials::new("id".to_string(), "secret".to_string());
-
     let authenticator = mock::Authenticator::new("the-auth-code".to_string());
     let http_client = mock::HttpClient::new();
     let token = oauth::Token::new(
@@ -84,7 +105,18 @@ async fn when_the_token_is_cached_but_expired_and_refreshable_it_refreshes_it_an
     );
     let cache = mock::Cache::new(HashMap::from([("token".to_string(), token.clone())]));
 
-    let client = oauth::Client::new(credentials, &http_client, &authenticator, &cache);
+    let client = oauth::Client::new(
+        &http_client,
+        &authenticator,
+        &cache,
+        oauth::Config {
+            client_id: "id",
+            client_secret: "secret",
+            auth_url: "https://the-auth-url",
+            token_url: "https://the-token-url",
+            redirect_url: "https://the-redirect-url",
+        },
+    );
 
     expect(&client.get_access_token().await.unwrap()).to(equal("ACCESS_TOKEN".to_string()));
 

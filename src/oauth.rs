@@ -4,15 +4,10 @@ use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
-const AUTH_URL: &str = "https://twitter.com/i/oauth2/authorize";
-const TOKEN_URL: &str = "https://api.twitter.com/2/oauth2/token";
-
 const CHARSET: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
 const PASSWORD_LEN: usize = 128;
 
 const CACHE_KEY: &str = "token";
-
-const REDIRECT_URL: &str = "http://0.0.0.0:8000";
 
 #[derive(PartialEq, Debug, Deserialize, Serialize, Clone)]
 pub struct Token {
@@ -66,15 +61,12 @@ struct TokenResposeBody {
     scope: String,
 }
 
-pub struct Credentials {
-    id: String,
-    secret: String,
-}
-
-impl Credentials {
-    pub fn new(id: String, secret: String) -> Credentials {
-        Credentials { id, secret }
-    }
+pub struct Config<'a> {
+    pub client_id: &'a str,
+    pub client_secret: &'a str,
+    pub auth_url: &'a str,
+    pub token_url: &'a str,
+    pub redirect_url: &'a str,
 }
 
 #[async_trait]
@@ -116,10 +108,10 @@ impl Authenticator for AsyncH1Authenticator {
 }
 
 pub struct Client<'a, H, A, C> {
-    credentials: Credentials,
     http_client: &'a H,
     authenticator: &'a A,
     cache: &'a C,
+    config: Config<'a>,
 }
 
 impl<'a, H, A, C> Client<'a, H, A, C>
@@ -129,16 +121,16 @@ where
     C: cache::Cache<Token>,
 {
     pub fn new(
-        credentials: Credentials,
         http_client: &'a H,
         authenticator: &'a A,
         cache: &'a C,
+        config: Config<'a>,
     ) -> Client<'a, H, A, C> {
         Client {
-            credentials,
             http_client,
             authenticator,
             cache,
+            config,
         }
     }
 
@@ -172,12 +164,12 @@ where
         let pkce_challenge = base64::encode_config(sha256(&pkce_verifier), base64::URL_SAFE_NO_PAD);
         let state = random_string(PASSWORD_LEN)?;
 
-        let mut auth_url = url::Url::parse(AUTH_URL)?;
+        let mut auth_url = url::Url::parse(self.config.auth_url)?;
         auth_url
             .query_pairs_mut()
             .append_pair("response_type", "code")
-            .append_pair("client_id", self.credentials.id.as_str())
-            .append_pair("redirect_uri", REDIRECT_URL)
+            .append_pair("client_id", self.config.client_id)
+            .append_pair("redirect_uri", self.config.redirect_url)
             .append_pair("scope", "tweet.read users.read offline.access")
             .append_pair("state", state.as_str())
             .append_pair("code_challenge", pkce_challenge.as_str())
@@ -204,7 +196,7 @@ where
         self.token(TokenRequestBody {
             code: code.to_string(),
             grant_type: "authorization_code".to_string(),
-            redirect_uri: REDIRECT_URL.to_string(),
+            redirect_uri: self.config.redirect_url.to_string(),
             code_verifier: String::from_utf8(pkce_verifier)?,
             ..Default::default()
         })
@@ -225,12 +217,13 @@ where
     }
 
     async fn token(&self, req_body: TokenRequestBody) -> Result<Token, anyhow::Error> {
-        let mut token_req = http_types::Request::new(http_types::Method::Post, TOKEN_URL);
+        let mut token_req =
+            http_types::Request::new(http_types::Method::Post, self.config.token_url);
         let body = http_types::Body::from_form(&req_body).map_err(|e| anyhow!(e))?;
         token_req.set_body(body);
         let basic_auth = base64::encode(format!(
             "{}:{}",
-            self.credentials.id, self.credentials.secret
+            self.config.client_id, self.config.client_secret
         ));
         token_req.insert_header("Authorization", format!("Basic {}", basic_auth));
 
