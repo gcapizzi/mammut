@@ -1,5 +1,5 @@
 use crate::cache;
-use anyhow::anyhow;
+use anyhow::{anyhow, bail, Result};
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -71,7 +71,7 @@ pub struct Config<'a> {
 
 #[async_trait]
 pub trait Authenticator {
-    async fn authenticate_user(&self, auth_url: &url::Url) -> Result<url::Url, anyhow::Error>;
+    async fn authenticate_user(&self, auth_url: &url::Url) -> Result<url::Url>;
 }
 
 pub struct AsyncH1Authenticator {}
@@ -84,7 +84,7 @@ impl AsyncH1Authenticator {
 
 #[async_trait]
 impl Authenticator for AsyncH1Authenticator {
-    async fn authenticate_user(&self, auth_url: &url::Url) -> Result<url::Url, anyhow::Error> {
+    async fn authenticate_user(&self, auth_url: &url::Url) -> Result<url::Url> {
         println!("{}", &auth_url);
 
         let auth_url_params: HashMap<_, _> = auth_url.query_pairs().into_owned().collect();
@@ -134,12 +134,12 @@ where
         }
     }
 
-    pub async fn get_access_token(&self) -> Result<String, anyhow::Error> {
+    pub async fn get_access_token(&self) -> Result<String> {
         let token = self.get_token().await?;
         Ok(token.access_token().clone())
     }
 
-    async fn get_token(&self) -> Result<Token, anyhow::Error> {
+    async fn get_token(&self) -> Result<Token> {
         if let Ok(t) = self.cache.get(CACHE_KEY) {
             if t.is_expired() {
                 let new_t = if let Ok(t) = self.refresh_token(t).await {
@@ -159,7 +159,7 @@ where
         }
     }
 
-    async fn login(&self) -> Result<Token, anyhow::Error> {
+    async fn login(&self) -> Result<Token> {
         let pkce_verifier = random_chars(PASSWORD_LEN);
         let pkce_challenge = base64::encode_config(sha256(&pkce_verifier), base64::URL_SAFE_NO_PAD);
         let state = random_string(PASSWORD_LEN)?;
@@ -190,7 +190,7 @@ where
             .ok_or(anyhow!("no `state`"))?;
 
         if received_state != &state {
-            return Err(anyhow!("wrong state!"));
+            bail!("wrong state!");
         }
 
         self.token(TokenRequestBody {
@@ -203,7 +203,7 @@ where
         .await
     }
 
-    async fn refresh_token(&self, token: Token) -> Result<Token, anyhow::Error> {
+    async fn refresh_token(&self, token: Token) -> Result<Token> {
         self.token(TokenRequestBody {
             grant_type: "refresh_token".to_string(),
             refresh_token: token
@@ -216,7 +216,7 @@ where
         .await
     }
 
-    async fn token(&self, req_body: TokenRequestBody) -> Result<Token, anyhow::Error> {
+    async fn token(&self, req_body: TokenRequestBody) -> Result<Token> {
         let mut token_req =
             http_types::Request::new(http_types::Method::Post, self.config.token_url);
         let body = http_types::Body::from_form(&req_body).map_err(|e| anyhow!(e))?;
@@ -252,7 +252,7 @@ fn random_chars(length: usize) -> Vec<u8> {
         .collect()
 }
 
-fn random_string(length: usize) -> Result<String, anyhow::Error> {
+fn random_string(length: usize) -> Result<String> {
     Ok(String::from_utf8(random_chars(length))?)
 }
 

@@ -3,9 +3,10 @@ mod http;
 mod oauth;
 mod twitter;
 
+use anyhow::Result;
 use futures::executor::block_on;
 
-fn main() -> Result<(), anyhow::Error> {
+fn main() -> Result<()> {
     let client_id = std::env::var("TWT_CLIENT_ID")?;
     let client_secret = std::env::var("TWT_CLIENT_SECRET")?;
 

@@ -1,4 +1,4 @@
-use anyhow::anyhow;
+use anyhow::{anyhow, Result};
 use async_trait::async_trait;
 use std::collections::HashMap;
 
@@ -65,7 +65,7 @@ impl Authenticator {
 
 #[async_trait]
 impl crate::oauth::Authenticator for Authenticator {
-    async fn authenticate_user(&self, auth_url: &url::Url) -> Result<url::Url, anyhow::Error> {
+    async fn authenticate_user(&self, auth_url: &url::Url) -> Result<url::Url> {
         *self.auth_url.lock().unwrap() = Some(auth_url.clone());
 
         let auth_url_params: HashMap<_, _> = auth_url.query_pairs().into_owned().collect();
@@ -94,13 +94,13 @@ impl<T> Cache<T> {
 }
 
 impl<T: Clone> crate::cache::Cache<T> for Cache<T> {
-    fn get(&self, key: &str) -> Result<T, anyhow::Error> {
+    fn get(&self, key: &str) -> Result<T> {
         let map = self.map.lock().unwrap();
         let value = map.get(key).ok_or(anyhow!("{} not found", key))?;
         Ok(value.clone())
     }
 
-    fn set(&self, key: &str, value: &T) -> Result<(), anyhow::Error> {
+    fn set(&self, key: &str, value: &T) -> Result<()> {
         let mut map = self.map.lock().unwrap();
         map.insert(key.to_string(), value.clone());
         Ok(())
