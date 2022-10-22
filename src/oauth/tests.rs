@@ -3,9 +3,8 @@ mod mock;
 use crate::oauth::{self, TokenCache};
 use expect::{
     expect,
-    matchers::{equal, option::be_none},
+    matchers::{collection::be_empty, equal, option::be_none},
 };
-use futures::executor::block_on;
 use std::collections::HashMap;
 
 #[async_std::test]
@@ -43,21 +42,20 @@ async fn when_the_token_is_not_cached_it_logins_and_saves_the_token() {
 
     let code_challenge = auth_url_params.get("code_challenge").unwrap();
 
-    let mut token_req = http_client.last_request().unwrap();
+    let reqs = http_client.requests();
+    let token_req = reqs.last().unwrap();
 
-    expect(&token_req.url().origin().unicode_serialization()).to(equal("https://the-token-url"));
+    expect(&token_req.method).to(equal("POST"));
+    expect(&token_req.url).to(equal("https://the-token-url"));
 
     // base64("id:secret") = "aWQ6c2VjcmV0"
-    expect(token_req.header("Authorization").unwrap()).to(equal("Basic aWQ6c2VjcmV0"));
+    expect(token_req.headers.get("authorization").unwrap()).to(equal("Basic aWQ6c2VjcmV0"));
 
-    let token_req_body = block_on(token_req.body_string()).unwrap();
-    let token_req_map: HashMap<String, String> =
-        serde_urlencoded::from_str(token_req_body.as_str()).unwrap();
-    expect(&token_req_map.get("code").unwrap()).to(equal("the-auth-code"));
-    expect(&token_req_map.get("grant_type").unwrap()).to(equal("authorization_code"));
-    expect(&token_req_map.get("redirect_uri").unwrap()).to(equal(redirect_url));
+    expect(&token_req.body.get("code").unwrap()).to(equal("the-auth-code"));
+    expect(&token_req.body.get("grant_type").unwrap()).to(equal("authorization_code"));
+    expect(&token_req.body.get("redirect_uri").unwrap()).to(equal(redirect_url));
 
-    let code_verifier = token_req_map.get("code_verifier").unwrap();
+    let code_verifier = token_req.body.get("code_verifier").unwrap();
     expect(&code_challenge).to(equal(&sha256(code_verifier)));
 
     let cached_token = cache.get().unwrap();
@@ -89,7 +87,7 @@ async fn when_the_token_is_cached_and_not_expired_it_returns_it() {
     expect(&client.get_access_token().await.unwrap()).to(equal("CACHED_ACCESS_TOKEN".to_string()));
 
     expect(&authenticator.last_auth_url()).to(be_none());
-    expect(&http_client.last_request()).to(be_none());
+    expect(&http_client.requests()).to(be_empty());
     expect(&cache.get().unwrap()).to(equal(token));
 }
 
@@ -119,16 +117,17 @@ async fn when_the_token_is_cached_but_expired_and_refreshable_it_refreshes_it_an
 
     expect(&client.get_access_token().await.unwrap()).to(equal("ACCESS_TOKEN".to_string()));
 
-    let mut token_req = http_client.last_request().unwrap();
+    let reqs = http_client.requests();
+    let token_req = reqs.last().unwrap().clone();
+
+    expect(&token_req.method).to(equal("POST"));
+    expect(&token_req.url).to(equal("https://the-token-url"));
 
     // base64("id:secret") = "aWQ6c2VjcmV0"
-    expect(token_req.header("Authorization").unwrap()).to(equal("Basic aWQ6c2VjcmV0"));
+    expect(token_req.headers.get("authorization").unwrap()).to(equal("Basic aWQ6c2VjcmV0"));
 
-    let token_req_body = block_on(token_req.body_string()).unwrap();
-    let token_req_map: HashMap<String, String> =
-        serde_urlencoded::from_str(token_req_body.as_str()).unwrap();
-    expect(&token_req_map.get("grant_type").unwrap()).to(equal("refresh_token"));
-    expect(&token_req_map.get("refresh_token").unwrap())
+    expect(&token_req.body.get("grant_type").unwrap()).to(equal("refresh_token"));
+    expect(&token_req.body.get("refresh_token").unwrap())
         .to(equal(&"CACHED_REFRESH_TOKEN".to_string()));
 
     let cached_token = cache.get().unwrap();

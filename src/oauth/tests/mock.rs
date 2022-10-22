@@ -1,23 +1,30 @@
 use anyhow::{anyhow, Result};
 use async_trait::async_trait;
+use futures::executor::block_on;
 use std::collections::HashMap;
 
 #[derive(Debug)]
 pub struct HttpClient {
-    req: std::sync::Mutex<Option<http_types::Request>>,
+    requests: std::sync::Mutex<Vec<HttpRequest>>,
+}
+
+#[derive(Debug, Clone)]
+pub struct HttpRequest {
+    pub method: String,
+    pub url: String,
+    pub headers: HashMap<String, String>,
+    pub body: HashMap<String, String>,
 }
 
 impl HttpClient {
     pub fn new() -> HttpClient {
         HttpClient {
-            req: std::sync::Mutex::new(None),
+            requests: std::sync::Mutex::new(Vec::new()),
         }
     }
 
-    pub fn last_request(&self) -> Option<http_types::Request> {
-        let mut req = self.req.lock().unwrap().clone()?;
-        req.set_body(self.req.lock().unwrap().as_mut()?.take_body());
-        Some(req)
+    pub fn requests(&self) -> Vec<HttpRequest> {
+        self.requests.lock().unwrap().to_vec()
     }
 }
 
@@ -27,9 +34,17 @@ impl http_client::HttpClient for HttpClient {
         &self,
         mut request: http_types::Request,
     ) -> Result<http_types::Response, http_types::Error> {
-        let mut req = request.clone();
-        req.set_body(request.take_body());
-        *self.req.lock().unwrap() = Some(req);
+        let body = block_on(request.body_string()).unwrap();
+        let body_map: HashMap<String, String> = serde_urlencoded::from_str(&body).unwrap();
+        self.requests.lock().unwrap().push(HttpRequest {
+            method: request.method().to_string(),
+            url: request.url().origin().unicode_serialization(),
+            headers: request
+                .into_iter()
+                .map(|(n, v)| (n.to_string(), v.last().to_string()))
+                .collect(),
+            body: body_map,
+        });
 
         let mut resp = http_types::Response::new(200);
         resp.set_body(
