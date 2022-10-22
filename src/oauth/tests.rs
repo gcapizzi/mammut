@@ -10,7 +10,17 @@ use std::collections::HashMap;
 #[async_std::test]
 async fn when_the_token_is_not_cached_it_logins_and_saves_the_token() {
     let authenticator = mock::Authenticator::new("the-auth-code".to_string());
-    let http_client = mock::HttpClient::new();
+    let http_client = mock::HttpClient::new([mock::HttpResponse {
+        status: 200,
+        body: "{
+            \"token_type\": \"bearer\",
+            \"expires_in\": 1,
+            \"access_token\": \"ACCESS_TOKEN\",
+            \"refresh_token\": \"REFRESH_TOKEN\",
+            \"scope\": \"SCOPE\"
+        }"
+        .to_string(),
+    }]);
     let cache = mock::TokenCache::empty();
 
     let client = oauth::Client::new(
@@ -67,7 +77,7 @@ async fn when_the_token_is_not_cached_it_logins_and_saves_the_token() {
 #[async_std::test]
 async fn when_the_token_is_cached_and_not_expired_it_returns_it() {
     let authenticator = mock::Authenticator::new(String::new());
-    let http_client = mock::HttpClient::new();
+    let http_client = mock::HttpClient::new([]);
     let token = oauth::Token::new("CACHED_ACCESS_TOKEN".to_string(), None, 1);
     let cache = mock::TokenCache::with_value(token.clone());
 
@@ -94,7 +104,17 @@ async fn when_the_token_is_cached_and_not_expired_it_returns_it() {
 #[async_std::test]
 async fn when_the_token_is_cached_but_expired_and_refreshable_it_refreshes_it_and_saves_it() {
     let authenticator = mock::Authenticator::new("the-auth-code".to_string());
-    let http_client = mock::HttpClient::new();
+    let http_client = mock::HttpClient::new([mock::HttpResponse {
+        status: 200,
+        body: "{
+            \"token_type\": \"bearer\",
+            \"expires_in\": 1,
+            \"access_token\": \"REFRESHED_ACCESS_TOKEN\",
+            \"refresh_token\": \"REFRESH_TOKEN\",
+            \"scope\": \"SCOPE\"
+        }"
+        .to_string(),
+    }]);
     let token = oauth::Token::new(
         "CACHED_ACCESS_TOKEN".to_string(),
         Some("CACHED_REFRESH_TOKEN".to_string()),
@@ -115,7 +135,8 @@ async fn when_the_token_is_cached_but_expired_and_refreshable_it_refreshes_it_an
         },
     );
 
-    expect(&client.get_access_token().await.unwrap()).to(equal("ACCESS_TOKEN".to_string()));
+    expect(&client.get_access_token().await.unwrap())
+        .to(equal("REFRESHED_ACCESS_TOKEN".to_string()));
 
     let reqs = http_client.requests();
     let token_req = reqs.last().unwrap().clone();
@@ -131,7 +152,7 @@ async fn when_the_token_is_cached_but_expired_and_refreshable_it_refreshes_it_an
         .to(equal(&"CACHED_REFRESH_TOKEN".to_string()));
 
     let cached_token = cache.get().unwrap();
-    expect(&cached_token.access_token()).to(equal(&"ACCESS_TOKEN".to_string()));
+    expect(&cached_token.access_token()).to(equal(&"REFRESHED_ACCESS_TOKEN".to_string()));
     expect(&cached_token.refresh_token()).to(equal(&Some("REFRESH_TOKEN".to_string())));
     expect(&cached_token.is_expired()).to(equal(false));
 }

@@ -1,11 +1,12 @@
 use anyhow::{anyhow, Result};
 use async_trait::async_trait;
 use futures::executor::block_on;
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 
 #[derive(Debug)]
 pub struct HttpClient {
     requests: std::sync::Mutex<Vec<HttpRequest>>,
+    responses: std::sync::Mutex<VecDeque<HttpResponse>>,
 }
 
 #[derive(Debug, Clone)]
@@ -16,15 +17,30 @@ pub struct HttpRequest {
     pub body: HashMap<String, String>,
 }
 
+#[derive(Debug, Clone)]
+pub struct HttpResponse {
+    pub status: u16,
+    pub body: String,
+}
+
 impl HttpClient {
-    pub fn new() -> HttpClient {
+    pub fn new<const N: usize>(resps: [HttpResponse; N]) -> HttpClient {
         HttpClient {
             requests: std::sync::Mutex::new(Vec::new()),
+            responses: std::sync::Mutex::new(VecDeque::from(resps)),
         }
     }
 
     pub fn requests(&self) -> Vec<HttpRequest> {
         self.requests.lock().unwrap().to_vec()
+    }
+}
+
+impl From<HttpResponse> for http_types::Response {
+    fn from(r: HttpResponse) -> http_types::Response {
+        let mut resp = http_types::Response::new(r.status);
+        resp.set_body(r.body);
+        resp
     }
 }
 
@@ -46,17 +62,12 @@ impl http_client::HttpClient for HttpClient {
             body: body_map,
         });
 
-        let mut resp = http_types::Response::new(200);
-        resp.set_body(
-            "{
-                    \"token_type\": \"bearer\",
-                    \"expires_in\": 1,
-                    \"access_token\": \"ACCESS_TOKEN\",
-                    \"refresh_token\": \"REFRESH_TOKEN\",
-                    \"scope\": \"SCOPE\"
-            }",
-        );
-        Ok(resp)
+        self.responses
+            .lock()
+            .unwrap()
+            .pop_front()
+            .map(|r| r.into())
+            .ok_or(http_types::Error::new(500, anyhow!("no responses set!")))
     }
 }
 
