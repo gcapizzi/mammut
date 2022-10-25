@@ -25,8 +25,7 @@ fn main() -> Result<()> {
         },
     );
     let token = block_on(oauth_client.get_access_token())?;
-    let authenticated_client = http::AuthenticatedClient::new(http_client, token);
-    let client = twitter::Client::new(authenticated_client);
+    let client = twitter::Client::new(http_client, token);
 
     dbg!(block_on(client.tweets([
         "1460323737035677698",
