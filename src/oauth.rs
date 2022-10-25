@@ -294,4 +294,7 @@ fn sha256(data: impl AsRef<[u8]>) -> impl AsRef<[u8]> {
 }
 
 #[cfg(test)]
+pub mod mock;
+
+#[cfg(test)]
 mod tests;

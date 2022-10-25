@@ -24,3 +24,6 @@ impl<C: http_client::HttpClient> http_client::HttpClient for AuthenticatedClient
         self.client.send(req).await
     }
 }
+
+#[cfg(test)]
+pub mod mock;

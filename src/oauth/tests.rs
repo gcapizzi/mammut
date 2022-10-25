@@ -1,6 +1,4 @@
-mod mock;
-
-use crate::oauth::{self, TokenCache};
+use crate::{oauth::TokenCache, *};
 use expect::{
     expect,
     matchers::{collection::be_empty, equal, option::be_none},
@@ -9,8 +7,8 @@ use std::collections::HashMap;
 
 #[async_std::test]
 async fn when_the_token_is_not_cached_it_logins_and_saves_the_token() {
-    let authenticator = mock::Authenticator::new("the-auth-code".to_string());
-    let http_client = mock::HttpClient::new([mock::HttpResponse {
+    let authenticator = oauth::mock::Authenticator::new("the-auth-code".to_string());
+    let http_client = http::mock::HttpClient::new([http::mock::HttpResponse {
         status: 200,
         body: "{
             \"token_type\": \"bearer\",
@@ -21,7 +19,7 @@ async fn when_the_token_is_not_cached_it_logins_and_saves_the_token() {
         }"
         .to_string(),
     }]);
-    let cache = mock::TokenCache::empty();
+    let cache = oauth::mock::TokenCache::empty();
 
     let client = oauth::Client::new(
         &http_client,
@@ -76,10 +74,10 @@ async fn when_the_token_is_not_cached_it_logins_and_saves_the_token() {
 
 #[async_std::test]
 async fn when_the_token_is_cached_and_not_expired_it_returns_it() {
-    let authenticator = mock::Authenticator::new(String::new());
-    let http_client = mock::HttpClient::new([]);
+    let authenticator = oauth::mock::Authenticator::new(String::new());
+    let http_client = http::mock::HttpClient::new([]);
     let token = oauth::Token::new("CACHED_ACCESS_TOKEN".to_string(), None, 1);
-    let cache = mock::TokenCache::with_value(token.clone());
+    let cache = oauth::mock::TokenCache::with_value(token.clone());
 
     let client = oauth::Client::new(
         &http_client,
@@ -103,8 +101,8 @@ async fn when_the_token_is_cached_and_not_expired_it_returns_it() {
 
 #[async_std::test]
 async fn when_the_token_is_cached_but_expired_and_refreshable_it_refreshes_it_and_saves_it() {
-    let authenticator = mock::Authenticator::new("the-auth-code".to_string());
-    let http_client = mock::HttpClient::new([mock::HttpResponse {
+    let authenticator = oauth::mock::Authenticator::new("the-auth-code".to_string());
+    let http_client = http::mock::HttpClient::new([http::mock::HttpResponse {
         status: 200,
         body: "{
             \"token_type\": \"bearer\",
@@ -120,7 +118,7 @@ async fn when_the_token_is_cached_but_expired_and_refreshable_it_refreshes_it_an
         Some("CACHED_REFRESH_TOKEN".to_string()),
         0,
     );
-    let cache = mock::TokenCache::with_value(token.clone());
+    let cache = oauth::mock::TokenCache::with_value(token.clone());
 
     let client = oauth::Client::new(
         &http_client,
@@ -159,13 +157,13 @@ async fn when_the_token_is_cached_but_expired_and_refreshable_it_refreshes_it_an
 
 #[async_std::test]
 async fn when_refreshing_fails_it_logins_again_and_saves_the_token() {
-    let authenticator = mock::Authenticator::new("the-auth-code".to_string());
-    let http_client = mock::HttpClient::new([
-        mock::HttpResponse {
+    let authenticator = oauth::mock::Authenticator::new("the-auth-code".to_string());
+    let http_client = http::mock::HttpClient::new([
+        http::mock::HttpResponse {
             status: 500,
             body: "".to_string(),
         },
-        mock::HttpResponse {
+        http::mock::HttpResponse {
             status: 200,
             body: "{
             \"token_type\": \"bearer\",
@@ -182,7 +180,7 @@ async fn when_refreshing_fails_it_logins_again_and_saves_the_token() {
         Some("CACHED_REFRESH_TOKEN".to_string()),
         0,
     );
-    let cache = mock::TokenCache::with_value(token.clone());
+    let cache = oauth::mock::TokenCache::with_value(token.clone());
 
     let client = oauth::Client::new(
         &http_client,
