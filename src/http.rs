@@ -56,7 +56,7 @@ pub mod mock {
             let body_map: HashMap<String, String> = serde_urlencoded::from_str(&body).unwrap();
             self.requests.lock().unwrap().push(HttpRequest {
                 method: request.method().to_string(),
-                url: request.url().origin().unicode_serialization(),
+                url: request.url().to_string(),
                 headers: request
                     .into_iter()
                     .map(|(n, v)| (n.to_string(), v.last().to_string()))

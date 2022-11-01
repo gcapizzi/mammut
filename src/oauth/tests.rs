@@ -54,7 +54,7 @@ async fn when_the_token_is_not_cached_it_logins_and_saves_the_token() {
     let token_req = reqs.last().unwrap();
 
     expect(&token_req.method).to(equal("POST"));
-    expect(&token_req.url).to(equal("https://the-token-url"));
+    expect(&token_req.url).to(equal("https://the-token-url/"));
 
     // base64("id:secret") = "aWQ6c2VjcmV0"
     expect(token_req.headers.get("authorization").unwrap()).to(equal("Basic aWQ6c2VjcmV0"));
@@ -140,7 +140,7 @@ async fn when_the_token_is_cached_but_expired_and_refreshable_it_refreshes_it_an
     let token_req = reqs.last().unwrap().clone();
 
     expect(&token_req.method).to(equal("POST"));
-    expect(&token_req.url).to(equal("https://the-token-url"));
+    expect(&token_req.url).to(equal("https://the-token-url/"));
 
     // base64("id:secret") = "aWQ6c2VjcmV0"
     expect(token_req.headers.get("authorization").unwrap()).to(equal("Basic aWQ6c2VjcmV0"));
@@ -215,7 +215,7 @@ async fn when_refreshing_fails_it_logins_again_and_saves_the_token() {
     let token_req = reqs.last().unwrap().clone();
 
     expect(&token_req.method).to(equal("POST"));
-    expect(&token_req.url).to(equal("https://the-token-url"));
+    expect(&token_req.url).to(equal("https://the-token-url/"));
 
     // base64("id:secret") = "aWQ6c2VjcmV0"
     expect(token_req.headers.get("authorization").unwrap()).to(equal("Basic aWQ6c2VjcmV0"));
