@@ -1,12 +1,12 @@
 const BASE_URL: &str = "https://api.twitter.com/2/";
 
-pub struct Client<C> {
-    http_client: C,
+pub struct Client<'a, C> {
+    http_client: &'a C,
     token: String,
 }
 
-impl<C: http_client::HttpClient> Client<C> {
-    pub fn new(http_client: C, token: String) -> Client<C> {
+impl<'a, C: http_client::HttpClient> Client<'a, C> {
+    pub fn new(http_client: &'a C, token: String) -> Client<'a, C> {
         Client { http_client, token }
     }
 

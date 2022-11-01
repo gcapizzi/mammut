@@ -37,7 +37,7 @@ fn main() -> Result<()> {
     match m.subcommand() {
         Some(("tweets", args)) => {
             let token = block_on(oauth_client.get_access_token())?;
-            let client = twitter::Client::new(http_client, token);
+            let client = twitter::Client::new(&http_client, token);
             let ids = args.get_many("ids").ok_or(anyhow!("no ids!"))?.cloned();
             println!("{}", block_on(client.tweets(ids)).unwrap());
         }
