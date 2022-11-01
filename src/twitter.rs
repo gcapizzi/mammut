@@ -23,3 +23,32 @@ impl<'a, C: http_client::HttpClient> Client<'a, C> {
         resp.body_string().await
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use crate::{http, twitter::*};
+    use expect::{expect, matchers::equal};
+
+    #[async_std::test]
+    async fn it_fetches_the_tweets() {
+        let http_client = http::mock::HttpClient::new([http::mock::HttpResponse {
+            status: 200,
+            body: "the-body".to_string(),
+        }]);
+        let client = Client::new(&http_client, "the-token".to_string());
+
+        let out = client
+            .tweets(vec!["foo".to_string(), "bar".to_string()])
+            .await
+            .unwrap();
+
+        expect(&out).to(equal("the-body".to_string()));
+
+        let reqs = http_client.requests();
+        let tweets_req = reqs.last().unwrap();
+
+        expect(&tweets_req.method).to(equal("GET"));
+        expect(&tweets_req.url).to(equal(format!("{}{}", BASE_URL, "tweets?ids=foo%2Cbar")));
+        expect(tweets_req.headers.get("authorization").unwrap()).to(equal("Bearer the-token"));
+    }
+}
