@@ -9,6 +9,7 @@ async-h1 = "2.3"
 async-std = "1.12"
 async-trait = "0.1.57"
 base64 = "0.13.0"
+clap = { version = "4", features = ["cargo"] }
 futures = "0.3"
 http-client = "6.5.3"
 http-types = "2.12"

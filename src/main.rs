@@ -2,7 +2,7 @@ mod http;
 mod oauth;
 mod twitter;
 
-use anyhow::Result;
+use anyhow::{anyhow, Result};
 use futures::executor::block_on;
 
 fn main() -> Result<()> {
@@ -24,15 +24,25 @@ fn main() -> Result<()> {
             redirect_url: "http://0.0.0.0:8000",
         },
     );
-    let token = block_on(oauth_client.get_access_token())?;
-    let client = twitter::Client::new(http_client, token);
 
-    dbg!(block_on(client.tweets([
-        "1460323737035677698",
-        "1519781379172495360",
-        "1519781381693353984",
-    ]))
-    .unwrap());
+    let m = clap::Command::new("twt")
+        .version(clap::crate_version!())
+        .subcommand_required(true)
+        .subcommand(
+            clap::Command::new("tweets")
+                .arg(clap::Arg::new("ids").num_args(1..=100).required(true)),
+        )
+        .get_matches();
+
+    match m.subcommand() {
+        Some(("tweets", args)) => {
+            let token = block_on(oauth_client.get_access_token())?;
+            let client = twitter::Client::new(http_client, token);
+            let ids = args.get_many("ids").ok_or(anyhow!("no ids!"))?.cloned();
+            println!("{}", block_on(client.tweets(ids)).unwrap());
+        }
+        _ => {}
+    }
 
     Ok(())
 }
