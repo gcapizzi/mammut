@@ -32,7 +32,7 @@ impl<'a, C: http_client::HttpClient> Client<'a, C> {
         Client { http_client, token }
     }
 
-    pub async fn tweets(&self, ids: impl IntoIterator<Item = String>) -> Result<Vec<Tweet>> {
+    pub async fn get_tweets(&self, ids: impl IntoIterator<Item = String>) -> Result<Vec<Tweet>> {
         let mut url = url::Url::parse(BASE_URL)?.join("tweets")?;
         let ids_str = &ids.into_iter().collect::<Vec<String>>().join(",");
         url.query_pairs_mut().append_pair("ids", ids_str);
@@ -88,7 +88,7 @@ mod tests {
         let client = Client::new(&http_client, "the-token".to_string());
 
         let tweets = client
-            .tweets(vec!["foo".to_string(), "bar".to_string()])
+            .get_tweets(vec!["foo".to_string(), "bar".to_string()])
             .await
             .unwrap();
 
@@ -124,7 +124,7 @@ mod tests {
         }]);
         let client = Client::new(&http_client, String::new());
 
-        let error = client.tweets(vec!["foo".to_string()]).await;
+        let error = client.get_tweets(vec!["foo".to_string()]).await;
         expect(&error).to(be_err());
 
         let error_str = &error.unwrap_err().to_string();
@@ -140,7 +140,7 @@ mod tests {
         let http_client = http::mock::HttpClient::new([]);
         let client = Client::new(&http_client, "the-token".to_string());
 
-        let error = client.tweets(vec!["foo".to_string()]).await;
+        let error = client.get_tweets(vec!["foo".to_string()]).await;
 
         expect(&error).to(be_err());
         expect(&error.unwrap_err().to_string()).to(equal("no responses set!"));

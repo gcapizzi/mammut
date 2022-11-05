@@ -29,17 +29,17 @@ fn main() -> Result<()> {
         .version(clap::crate_version!())
         .subcommand_required(true)
         .subcommand(
-            clap::Command::new("tweets")
+            clap::Command::new("get-tweets")
                 .arg(clap::Arg::new("ids").num_args(1..=100).required(true)),
         )
         .get_matches();
 
     match m.subcommand() {
-        Some(("tweets", args)) => {
+        Some(("get-tweets", args)) => {
             let token = block_on(oauth_client.get_access_token())?;
             let client = twitter::Client::new(&http_client, token);
             let ids = args.get_many("ids").ok_or(anyhow!("no ids!"))?.cloned();
-            let tweets = block_on(client.tweets(ids))?;
+            let tweets = block_on(client.get_tweets(ids))?;
             println!("{}", serde_json::to_string_pretty(&tweets)?)
         }
         _ => {}
