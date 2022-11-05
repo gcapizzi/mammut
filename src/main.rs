@@ -39,7 +39,8 @@ fn main() -> Result<()> {
             let token = block_on(oauth_client.get_access_token())?;
             let client = twitter::Client::new(&http_client, token);
             let ids = args.get_many("ids").ok_or(anyhow!("no ids!"))?.cloned();
-            println!("{}", block_on(client.tweets(ids)).unwrap());
+            let tweets = block_on(client.tweets(ids))?;
+            println!("{}", serde_json::to_string_pretty(&tweets)?)
         }
         _ => {}
     }
