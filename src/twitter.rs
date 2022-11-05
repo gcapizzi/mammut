@@ -137,8 +137,22 @@ mod tests {
 
     #[async_std::test]
     async fn when_the_request_fails_it_returns_an_error() {
+        let http_client = http::mock::HttpClient::new([http::mock::HttpResponse {
+            status: 400,
+            body: "boom".to_string(),
+        }]);
+        let client = Client::new(&http_client, String::new());
+
+        let error = client.get_tweets(vec!["foo".to_string()]).await;
+
+        expect(&error).to(be_err());
+        expect(&error.unwrap_err().to_string()).to(equal("400 Bad Request: boom"));
+    }
+
+    #[async_std::test]
+    async fn when_the_request_cant_be_made_it_returns_an_error() {
         let http_client = http::mock::HttpClient::new([]);
-        let client = Client::new(&http_client, "the-token".to_string());
+        let client = Client::new(&http_client, String::new());
 
         let error = client.get_tweets(vec!["foo".to_string()]).await;
 
