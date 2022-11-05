@@ -32,10 +32,11 @@ impl<'a, C: http_client::HttpClient> Client<'a, C> {
         Client { http_client, token }
     }
 
-    pub async fn get_tweets(&self, ids: impl IntoIterator<Item = String>) -> Result<Vec<Tweet>> {
+    pub async fn get_tweets<T: AsRef<str>>(&self, ids: &[T]) -> Result<Vec<Tweet>> {
         let mut url = url::Url::parse(BASE_URL)?.join("tweets")?;
-        let ids_str = &ids.into_iter().collect::<Vec<String>>().join(",");
-        url.query_pairs_mut().append_pair("ids", ids_str);
+        let ids_str: String =
+            itertools::Itertools::intersperse(ids.iter().map(|s| s.as_ref()), ",").collect();
+        url.query_pairs_mut().append_pair("ids", &ids_str);
         let body = self.get(url).await?;
         let response: TweetsResponse = serde_json::from_str(&body).map_err(|e| anyhow!(e))?;
 
@@ -87,10 +88,7 @@ mod tests {
         }]);
         let client = Client::new(&http_client, "the-token".to_string());
 
-        let tweets = client
-            .get_tweets(vec!["foo".to_string(), "bar".to_string()])
-            .await
-            .unwrap();
+        let tweets = client.get_tweets(&["foo", "bar"]).await.unwrap();
 
         expect(&tweets.len()).to(equal(2));
         expect(&tweets).to(contain(Tweet {
@@ -124,7 +122,7 @@ mod tests {
         }]);
         let client = Client::new(&http_client, String::new());
 
-        let error = client.get_tweets(vec!["foo".to_string()]).await;
+        let error = client.get_tweets(&["foo"]).await;
         expect(&error).to(be_err());
 
         let error_str = &error.unwrap_err().to_string();
@@ -143,7 +141,7 @@ mod tests {
         }]);
         let client = Client::new(&http_client, String::new());
 
-        let error = client.get_tweets(vec!["foo".to_string()]).await;
+        let error = client.get_tweets(&["foo"]).await;
 
         expect(&error).to(be_err());
         expect(&error.unwrap_err().to_string()).to(equal("400 Bad Request: boom"));
@@ -154,7 +152,7 @@ mod tests {
         let http_client = http::mock::HttpClient::new([]);
         let client = Client::new(&http_client, String::new());
 
-        let error = client.get_tweets(vec!["foo".to_string()]).await;
+        let error = client.get_tweets(&["foo"]).await;
 
         expect(&error).to(be_err());
         expect(&error.unwrap_err().to_string()).to(equal("no responses set!"));

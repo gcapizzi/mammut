@@ -38,8 +38,12 @@ fn main() -> Result<()> {
         Some(("get-tweets", args)) => {
             let token = block_on(oauth_client.get_access_token())?;
             let client = twitter::Client::new(&http_client, token);
-            let ids = args.get_many("ids").ok_or(anyhow!("no ids!"))?.cloned();
-            let tweets = block_on(client.get_tweets(ids))?;
+            let ids = args
+                .get_many("ids")
+                .ok_or(anyhow!("no ids!"))?
+                .cloned()
+                .collect::<Vec<String>>();
+            let tweets = block_on(client.get_tweets(&ids))?;
             println!("{}", serde_json::to_string_pretty(&tweets)?)
         }
         _ => {}
