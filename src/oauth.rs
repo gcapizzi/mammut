@@ -1,5 +1,4 @@
 use anyhow::{anyhow, bail, Result};
-use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
@@ -68,22 +67,22 @@ pub struct Config<'a> {
     pub redirect_url: &'a str,
 }
 
-#[async_trait]
 pub trait Authenticator {
-    async fn authenticate_user(&self, auth_url: &url::Url) -> Result<url::Url>;
+    fn authenticate_user(&self, auth_url: &url::Url) -> Result<url::Url>;
 }
 
-pub struct AsyncH1Authenticator {}
+pub struct StdAuthenticator {}
 
-impl AsyncH1Authenticator {
-    pub fn new() -> AsyncH1Authenticator {
-        AsyncH1Authenticator {}
+impl StdAuthenticator {
+    pub fn new() -> StdAuthenticator {
+        StdAuthenticator {}
     }
 }
 
-#[async_trait]
-impl Authenticator for AsyncH1Authenticator {
-    async fn authenticate_user(&self, auth_url: &url::Url) -> Result<url::Url> {
+impl Authenticator for StdAuthenticator {
+    fn authenticate_user(&self, auth_url: &url::Url) -> Result<url::Url> {
+        use std::io::{BufRead, Write};
+
         println!("{}", &auth_url);
 
         let auth_url_params: HashMap<_, _> = auth_url.query_pairs().into_owned().collect();
@@ -92,17 +91,14 @@ impl Authenticator for AsyncH1Authenticator {
             .ok_or(anyhow!("no `redirect_uri`"))?;
         let redirect_url = url::Url::parse(redirect_uri)?;
         let addrs = redirect_url.socket_addrs(|| None)?;
-        let listener = async_std::net::TcpListener::bind(&*addrs).await?;
-        let (mut stream, _) = listener.accept().await?;
-        let (request, _) = async_h1::server::decode(stream.clone())
-            .await
-            .map_err(|e| anyhow!(e))?
-            .ok_or(anyhow!("no request :/"))?;
-        let mut response = http_types::Response::new(http_types::StatusCode::Ok);
-        response.set_body("done!");
-        let mut response_encoder = async_h1::server::Encoder::new(response, request.method());
-        async_std::io::copy(&mut response_encoder, &mut stream).await?;
-        Ok(request.url().clone())
+        let listener = std::net::TcpListener::bind(&*addrs)?;
+        let (mut stream, _) = listener.accept()?;
+        let mut buf = std::io::BufReader::new(&stream);
+        let mut start_line = String::new();
+        buf.read_line(&mut start_line)?;
+        let path = start_line.split(" ").nth(1).ok_or(anyhow!("no path"))?;
+        stream.write_all("HTTP/1.1 200 OK\r\nContent-Length: 5\r\n\r\ndone!".as_bytes())?;
+        Ok(redirect_url.join(path)?)
     }
 }
 
@@ -207,7 +203,6 @@ where
         let redirect_url = self
             .authenticator
             .authenticate_user(&auth_url)
-            .await
             .map_err(|e| anyhow!(e))?;
 
         let redirect_url_params: HashMap<_, _> = redirect_url.query_pairs().into_owned().collect();

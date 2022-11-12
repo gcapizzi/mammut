@@ -1,6 +1,5 @@
 use crate::oauth;
 use anyhow::{anyhow, Result};
-use async_trait::async_trait;
 use std::collections::HashMap;
 
 pub struct Authenticator {
@@ -21,9 +20,8 @@ impl Authenticator {
     }
 }
 
-#[async_trait]
 impl oauth::Authenticator for Authenticator {
-    async fn authenticate_user(&self, auth_url: &url::Url) -> Result<url::Url> {
+    fn authenticate_user(&self, auth_url: &url::Url) -> Result<url::Url> {
         *self.auth_url.lock().unwrap() = Some(auth_url.clone());
 
         let auth_url_params: HashMap<_, _> = auth_url.query_pairs().into_owned().collect();

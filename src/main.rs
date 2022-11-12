@@ -10,7 +10,7 @@ fn main() -> Result<()> {
     let client_secret = std::env::var("TWT_CLIENT_SECRET")?;
 
     let http_client = http_client::h1::H1Client::new();
-    let authenticator = oauth::AsyncH1Authenticator::new();
+    let authenticator = oauth::StdAuthenticator::new();
     let cache = oauth::XDGTokenCache::new("twt".to_string());
     let oauth_client = oauth::Client::new(
         &http_client,
