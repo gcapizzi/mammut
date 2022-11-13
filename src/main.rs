@@ -3,13 +3,12 @@ mod oauth;
 mod twitter;
 
 use anyhow::{anyhow, Result};
-use futures::executor::block_on;
 
 fn main() -> Result<()> {
     let client_id = std::env::var("TWT_CLIENT_ID")?;
     let client_secret = std::env::var("TWT_CLIENT_SECRET")?;
 
-    let http_client = http_client::h1::H1Client::new();
+    let http_client = http::UreqClient::new();
     let authenticator = oauth::StdAuthenticator::new();
     let cache = oauth::XDGTokenCache::new("twt".to_string());
     let oauth_client = oauth::Client::new(
@@ -36,14 +35,14 @@ fn main() -> Result<()> {
 
     match m.subcommand() {
         Some(("get-tweets", args)) => {
-            let token = block_on(oauth_client.get_access_token())?;
+            let token = oauth_client.get_access_token()?;
             let client = twitter::Client::new(&http_client, token);
             let ids = args
                 .get_many("ids")
                 .ok_or(anyhow!("no ids!"))?
                 .cloned()
                 .collect::<Vec<String>>();
-            let tweets = block_on(client.get_tweets(&ids))?;
+            let tweets = client.get_tweets(&ids)?;
             println!("{}", serde_json::to_string_pretty(&tweets)?)
         }
         _ => {}

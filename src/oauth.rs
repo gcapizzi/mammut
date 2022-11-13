@@ -141,7 +141,7 @@ pub struct Client<'a, H, A, C> {
 
 impl<'a, H, A, C> Client<'a, H, A, C>
 where
-    H: http_client::HttpClient,
+    H: crate::http::Client,
     A: Authenticator,
     C: TokenCache,
 {
@@ -159,18 +159,18 @@ where
         }
     }
 
-    pub async fn get_access_token(&self) -> Result<String> {
-        let token = self.get_token().await?;
+    pub fn get_access_token(&self) -> Result<String> {
+        let token = self.get_token()?;
         Ok(token.access_token().clone())
     }
 
-    async fn get_token(&self) -> Result<Token> {
+    fn get_token(&self) -> Result<Token> {
         if let Ok(t) = self.cache.get() {
             if t.is_expired() {
-                let new_t = if let Ok(t) = self.refresh_token(t).await {
+                let new_t = if let Ok(t) = self.refresh_token(t) {
                     t
                 } else {
-                    self.login().await?
+                    self.login()?
                 };
                 self.cache.set(&new_t)?;
                 Ok(new_t)
@@ -178,13 +178,13 @@ where
                 return Ok(t);
             }
         } else {
-            let new_t = self.login().await?;
+            let new_t = self.login()?;
             self.cache.set(&new_t)?;
             Ok(new_t)
         }
     }
 
-    async fn login(&self) -> Result<Token> {
+    fn login(&self) -> Result<Token> {
         let pkce_verifier = random_chars(PASSWORD_LEN);
         let pkce_challenge = base64::encode_config(sha256(&pkce_verifier), base64::URL_SAFE_NO_PAD);
         let state = random_string(PASSWORD_LEN)?;
@@ -200,10 +200,7 @@ where
             .append_pair("code_challenge", pkce_challenge.as_str())
             .append_pair("code_challenge_method", "S256");
 
-        let redirect_url = self
-            .authenticator
-            .authenticate_user(&auth_url)
-            .map_err(|e| anyhow!(e))?;
+        let redirect_url = self.authenticator.authenticate_user(&auth_url)?;
 
         let redirect_url_params: HashMap<_, _> = redirect_url.query_pairs().into_owned().collect();
         let code = redirect_url_params
@@ -224,10 +221,9 @@ where
             code_verifier: String::from_utf8(pkce_verifier)?,
             ..Default::default()
         })
-        .await
     }
 
-    async fn refresh_token(&self, token: Token) -> Result<Token> {
+    fn refresh_token(&self, token: Token) -> Result<Token> {
         self.token(TokenRequestBody {
             grant_type: "refresh_token".to_string(),
             refresh_token: token
@@ -237,26 +233,20 @@ where
                 .to_string(),
             ..Default::default()
         })
-        .await
     }
 
-    async fn token(&self, req_body: TokenRequestBody) -> Result<Token> {
-        let mut token_req =
-            http_types::Request::new(http_types::Method::Post, self.config.token_url);
-        let body = http_types::Body::from_form(&req_body).map_err(|e| anyhow!(e))?;
-        token_req.set_body(body);
+    fn token(&self, req_body: TokenRequestBody) -> Result<Token> {
         let basic_auth = base64::encode(format!(
             "{}:{}",
             self.config.client_id, self.config.client_secret
         ));
-        token_req.insert_header("Authorization", format!("Basic {}", basic_auth));
+        let req = ::http::Request::post(self.config.token_url)
+            .header("Authorization", format!("Basic {}", basic_auth))
+            .header("Content-Type", "application/x-www-form-urlencoded")
+            .body(serde_urlencoded::to_string(req_body)?)?;
 
-        let mut token_resp = self
-            .http_client
-            .send(token_req)
-            .await
-            .map_err(|e| anyhow!(e))?;
-        let resp_body: TokenResposeBody = token_resp.body_json().await.map_err(|e| anyhow!(e))?;
+        let resp = self.http_client.send(req)?;
+        let resp_body: TokenResposeBody = serde_json::from_reader(resp.into_body())?;
 
         Ok(Token::new(
             resp_body.access_token,
