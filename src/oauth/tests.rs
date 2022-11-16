@@ -163,6 +163,48 @@ fn when_the_token_is_cached_but_expired_and_refreshable_it_refreshes_it_and_save
 }
 
 #[test]
+fn get_access_token_when_the_token_is_cached_but_expired_and_not_refreshable_it_logins() {
+    let authenticator = oauth::mock::Authenticator::new("the-auth-code".to_string());
+    let http_client = http::mock::Client::new([::http::Response::builder()
+        .status(200)
+        .body(
+            r#"{
+                "token_type": "bearer",
+                "expires_in": 1,
+                "access_token": "NEW_ACCESS_TOKEN",
+                "scope": "SCOPE"
+            }"#
+            .to_string(),
+        )
+        .unwrap()]);
+    let token = oauth::Token::new("CACHED_ACCESS_TOKEN".to_string(), None, 0);
+    let cache = oauth::mock::TokenCache::with_value(token.clone());
+
+    let client = oauth::Client::new(
+        &http_client,
+        &authenticator,
+        &cache,
+        oauth::Config {
+            client_id: "id",
+            client_secret: "secret",
+            auth_url: "https://the-auth-url",
+            token_url: "https://the-token-url",
+            redirect_url: "https://the-redirect-url",
+        },
+    );
+
+    expect(&client.get_access_token().unwrap()).to(equal("NEW_ACCESS_TOKEN".to_string()));
+
+    let reqs = http_client.requests();
+    let token_req = reqs.last().unwrap();
+
+    expect(&token_req.body().get("grant_type").unwrap()).to(equal("authorization_code"));
+
+    let cached_token = cache.get().unwrap();
+    expect(&cached_token.access_token()).to(equal(&"NEW_ACCESS_TOKEN".to_string()));
+}
+
+#[test]
 fn when_refreshing_fails_it_logins_again_and_saves_the_token() {
     let authenticator = oauth::mock::Authenticator::new("the-auth-code".to_string());
     let http_client = http::mock::Client::new([
