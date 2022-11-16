@@ -165,23 +165,16 @@ where
     }
 
     fn get_token(&self) -> Result<Token> {
-        if let Ok(t) = self.cache.get() {
-            if t.is_expired() {
-                let new_t = if let Ok(t) = self.refresh_token(t) {
-                    t
+        self.cache
+            .get()
+            .and_then(|t| {
+                if t.is_expired() {
+                    self.refresh_token(t).or_else(|_| self.login())
                 } else {
-                    self.login()?
-                };
-                self.cache.set(&new_t)?;
-                Ok(new_t)
-            } else {
-                return Ok(t);
-            }
-        } else {
-            let new_t = self.login()?;
-            self.cache.set(&new_t)?;
-            Ok(new_t)
-        }
+                    Ok(t)
+                }
+            })
+            .or_else(|_| self.login())
     }
 
     fn login(&self) -> Result<Token> {
@@ -248,11 +241,15 @@ where
         let resp = self.http_client.send(req)?;
         let resp_body: TokenResposeBody = serde_json::from_reader(resp.into_body())?;
 
-        Ok(Token::new(
+        let token = Token::new(
             resp_body.access_token,
             resp_body.refresh_token,
             resp_body.expires_in,
-        ))
+        );
+
+        self.cache.set(&token)?;
+
+        Ok(token)
     }
 }
 
