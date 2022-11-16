@@ -198,6 +198,9 @@ fn get_access_token_when_the_token_is_cached_but_expired_and_not_refreshable_it_
     let reqs = http_client.requests();
     let token_req = reqs.last().unwrap();
 
+    expect(&token_req.method()).to(equal("POST"));
+    expect(&token_req.uri()).to(equal("https://the-token-url/"));
+    expect(&token_req.body().get("code").unwrap()).to(equal("the-auth-code"));
     expect(&token_req.body().get("grant_type").unwrap()).to(equal("authorization_code"));
 
     let cached_token = cache.get().unwrap();
@@ -248,40 +251,16 @@ fn get_access_token_when_refreshing_fails_it_logins_again() {
 
     expect(&client.get_access_token().unwrap()).to(equal("NEW_ACCESS_TOKEN".to_string()));
 
-    let auth_url = authenticator.last_auth_url().unwrap();
-    expect(&auth_url.origin().unicode_serialization()).to(equal("https://the-auth-url"));
-
-    let auth_url_params: HashMap<_, _> = auth_url.query_pairs().into_owned().collect();
-    expect(auth_url_params.get("response_type").unwrap()).to(equal("code"));
-    expect(auth_url_params.get("client_id").unwrap()).to(equal("id"));
-    expect(auth_url_params.get("scope").unwrap()).to(equal("tweet.read users.read offline.access"));
-    expect(&auth_url_params.get("code_challenge_method")).to(equal(Some(&"S256".to_string())));
-
-    let redirect_url = auth_url_params.get("redirect_uri").unwrap();
-    expect(&redirect_url).to(equal("https://the-redirect-url"));
-
-    let code_challenge = auth_url_params.get("code_challenge").unwrap();
-
     let reqs = http_client.requests();
     let token_req = reqs.last().unwrap();
 
     expect(&token_req.method()).to(equal("POST"));
     expect(&token_req.uri()).to(equal("https://the-token-url/"));
-
-    // base64("id:secret") = "aWQ6c2VjcmV0"
-    expect(token_req.headers().get("authorization").unwrap()).to(equal("Basic aWQ6c2VjcmV0"));
-
     expect(&token_req.body().get("code").unwrap()).to(equal("the-auth-code"));
     expect(&token_req.body().get("grant_type").unwrap()).to(equal("authorization_code"));
-    expect(&token_req.body().get("redirect_uri").unwrap()).to(equal(redirect_url));
-
-    let code_verifier = token_req.body().get("code_verifier").unwrap();
-    expect(&code_challenge).to(equal(&sha256(code_verifier)));
 
     let cached_token = cache.get().unwrap();
     expect(&cached_token.access_token()).to(equal(&"NEW_ACCESS_TOKEN".to_string()));
-    expect(&cached_token.refresh_token()).to(equal(&Some("NEW_REFRESH_TOKEN".to_string())));
-    expect(&cached_token.is_expired()).to(equal(false));
 }
 
 fn sha256(data: &str) -> String {
