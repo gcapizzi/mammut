@@ -6,7 +6,7 @@ use expect::{
 use std::collections::HashMap;
 
 #[test]
-fn when_the_token_is_not_cached_it_logins_and_saves_the_token() {
+fn get_access_token_when_the_token_is_not_cached_it_logins() {
     let authenticator = oauth::mock::Authenticator::new("the-auth-code".to_string());
     let http_client = http::mock::Client::new([::http::Response::builder()
         .status(200)
@@ -77,7 +77,7 @@ fn when_the_token_is_not_cached_it_logins_and_saves_the_token() {
 }
 
 #[test]
-fn when_the_token_is_cached_and_not_expired_it_returns_it() {
+fn get_access_token_when_the_token_is_cached_and_not_expired_it_returns_it() {
     let authenticator = oauth::mock::Authenticator::new(String::new());
     let http_client = http::mock::Client::new([]);
     let token = oauth::Token::new("CACHED_ACCESS_TOKEN".to_string(), None, 1);
@@ -104,7 +104,7 @@ fn when_the_token_is_cached_and_not_expired_it_returns_it() {
 }
 
 #[test]
-fn when_the_token_is_cached_but_expired_and_refreshable_it_refreshes_it_and_saves_it() {
+fn get_access_token_when_the_token_is_cached_but_expired_and_refreshable_it_refreshes_it() {
     let authenticator = oauth::mock::Authenticator::new("the-auth-code".to_string());
     let http_client = http::mock::Client::new([::http::Response::builder()
         .status(200)
@@ -205,7 +205,7 @@ fn get_access_token_when_the_token_is_cached_but_expired_and_not_refreshable_it_
 }
 
 #[test]
-fn when_refreshing_fails_it_logins_again_and_saves_the_token() {
+fn get_access_token_when_refreshing_fails_it_logins_again() {
     let authenticator = oauth::mock::Authenticator::new("the-auth-code".to_string());
     let http_client = http::mock::Client::new([
         ::http::Response::builder()
