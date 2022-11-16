@@ -11,15 +11,17 @@ const CACHE_KEY: &str = "token";
 pub struct Token {
     access_token: String,
     refresh_token: Option<String>,
-    expires_at: std::time::SystemTime,
+    created_at: std::time::SystemTime,
+    expires_in: Option<u64>,
 }
 
 impl Token {
-    fn new(access_token: String, refresh_token: Option<String>, expires_in: u64) -> Token {
+    fn new(access_token: String, refresh_token: Option<String>, expires_in: Option<u64>) -> Token {
         Token {
             access_token,
             refresh_token,
-            expires_at: std::time::SystemTime::now() + std::time::Duration::from_secs(expires_in),
+            created_at: std::time::SystemTime::now(),
+            expires_in,
         }
     }
 
@@ -31,8 +33,15 @@ impl Token {
         &self.refresh_token
     }
 
+    fn expires_at(&self) -> Option<std::time::SystemTime> {
+        self.expires_in
+            .map(|s| self.created_at + std::time::Duration::from_secs(s))
+    }
+
     fn is_expired(&self) -> bool {
-        self.expires_at <= std::time::SystemTime::now()
+        self.expires_at()
+            .map(|t| t <= std::time::SystemTime::now())
+            .unwrap_or(false)
     }
 }
 
@@ -53,7 +62,7 @@ struct TokenRequestBody {
 #[derive(Debug, Serialize, Deserialize)]
 struct TokenResposeBody {
     token_type: String,
-    expires_in: u64,
+    expires_in: Option<u64>,
     access_token: String,
     refresh_token: Option<String>,
     scope: String,
