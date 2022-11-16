@@ -21,10 +21,12 @@ struct Error {
     detail: String,
 }
 
-#[derive(Deserialize)]
-struct TweetsResponse {
-    data: Option<Vec<Tweet>>,
-    errors: Option<Vec<Error>>,
+#[derive(Debug, Deserialize)]
+pub struct Tweets {
+    #[serde(default)]
+    data: Vec<Tweet>,
+    #[serde(default)]
+    errors: Vec<Error>,
 }
 
 impl<'a, C: crate::http::Client> Client<'a, C> {
@@ -32,35 +34,31 @@ impl<'a, C: crate::http::Client> Client<'a, C> {
         Client { http_client, token }
     }
 
-    pub fn get_tweets<T: AsRef<str>>(&self, ids: &[T]) -> Result<Vec<Tweet>> {
+    pub fn get_tweets<T: AsRef<str>>(&self, ids: &[T]) -> Result<Tweets> {
         let mut url = url::Url::parse(BASE_URL)?.join("tweets")?;
         let ids_str: String =
             itertools::Itertools::intersperse(ids.iter().map(|s| s.as_ref()), ",").collect();
         url.query_pairs_mut().append_pair("ids", &ids_str);
-        let body = self.get(url)?;
-        let response: TweetsResponse = serde_json::from_str(&body).map_err(|e| anyhow!(e))?;
-
-        let errors = response.errors.unwrap_or(Vec::new());
-        if errors.is_empty() {
-            Ok(response.data.unwrap_or(Vec::new()))
-        } else {
-            Err(anyhow!(serde_json::to_string_pretty(&errors)?))
-        }
-    }
-
-    fn get(&self, url: url::Url) -> Result<String> {
         let req = http::Request::get(url.to_string())
             .header("Authorization", format!("Bearer {}", self.token))
             .body("")?;
-        let mut resp = self.http_client.send(req)?;
-        let mut body = String::new();
-        resp.body_mut().read_to_string(&mut body)?;
-        if resp.status().is_success() {
-            Ok(body)
+
+        let resp = self.http_client.send(req)?;
+        let status = resp.status();
+        let body = resp.into_body();
+
+        if status.is_success() {
+            serde_json::from_reader(body).map_err(|e| anyhow!(e))
         } else {
-            Err(anyhow!("{}: {}", resp.status(), body))
+            Err(anyhow!("{}: {}", status, read(body)?))
         }
     }
+}
+
+fn read(mut reader: impl std::io::Read) -> Result<String> {
+    let mut str = String::new();
+    reader.read_to_string(&mut str)?;
+    Ok(str)
 }
 
 #[cfg(test)]
@@ -68,7 +66,11 @@ mod tests {
     use crate::{http, twitter::*};
     use expect::{
         expect,
-        matchers::{collection::contain, equal, result::be_err, string::match_regex},
+        matchers::{
+            collection::{be_empty, contain},
+            equal,
+            result::be_err,
+        },
     };
 
     #[test]
@@ -89,15 +91,16 @@ mod tests {
 
         let tweets = client.get_tweets(&["foo", "bar"]).unwrap();
 
-        expect(&tweets.len()).to(equal(2));
-        expect(&tweets).to(contain(Tweet {
+        expect(&tweets.data.len()).to(equal(2));
+        expect(&tweets.data).to(contain(Tweet {
             id: "id-foo".to_string(),
             text: "foo".to_string(),
         }));
-        expect(&tweets).to(contain(Tweet {
+        expect(&tweets.data).to(contain(Tweet {
             id: "id-bar".to_string(),
             text: "bar".to_string(),
         }));
+        expect(&tweets.errors).to(be_empty());
 
         let reqs = http_client.requests();
         let tweets_req = reqs.last().unwrap();
@@ -115,6 +118,10 @@ mod tests {
             .status(200)
             .body(
                 r#"{
+                    "data": [
+                        { "id": "id-foo", "text": "foo" },
+                        { "id": "id-bar", "text": "bar" }
+                    ],
                     "errors": [
                         { "type": "about:blank", "title": "foo-error", "detail": "foo-detail" },
                         { "type": "about:blank", "title": "bar-error", "detail": "bar-detail" }
@@ -125,15 +132,20 @@ mod tests {
             .unwrap()]);
         let client = Client::new(&http_client, String::new());
 
-        let error = client.get_tweets(&["foo"]);
-        expect(&error).to(be_err());
+        let tweets = client.get_tweets(&["foo"]).unwrap();
 
-        let error_str = &error.unwrap_err().to_string();
-        expect(error_str).to(match_regex("about:blank"));
-        expect(error_str).to(match_regex("foo-error"));
-        expect(error_str).to(match_regex("foo-detail"));
-        expect(error_str).to(match_regex("bar-error"));
-        expect(error_str).to(match_regex("bar-detail"));
+        expect(&tweets.data.len()).to(equal(2));
+        expect(&tweets.errors.len()).to(equal(2));
+        expect(&tweets.errors).to(contain(Error {
+            r#type: "about:blank".to_string(),
+            title: "foo-error".to_string(),
+            detail: "foo-detail".to_string(),
+        }));
+        expect(&tweets.errors).to(contain(Error {
+            r#type: "about:blank".to_string(),
+            title: "bar-error".to_string(),
+            detail: "bar-detail".to_string(),
+        }));
     }
 
     #[test]

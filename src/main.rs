@@ -43,7 +43,7 @@ fn main() -> Result<()> {
                 .cloned()
                 .collect::<Vec<String>>();
             let tweets = client.get_tweets(&ids)?;
-            println!("{}", serde_json::to_string_pretty(&tweets)?)
+            println!("{:?}", tweets)
         }
         _ => {}
     }
