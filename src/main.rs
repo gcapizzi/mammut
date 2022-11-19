@@ -11,7 +11,7 @@ fn main() -> Result<()> {
     let http_client = http::UreqClient::new();
     let authenticator = oauth::StdAuthenticator::new();
     let cache = oauth::XDGTokenCache::new("twt".to_string());
-    let oauth_client = oauth::Client::new(
+    let oauth_client = oauth::DefaultClient::new(
         &http_client,
         &authenticator,
         &cache,
@@ -23,6 +23,8 @@ fn main() -> Result<()> {
             redirect_url: "http://0.0.0.0:8000",
         },
     );
+    let authenticated_http_client = http::AuthenticatedClient::new(&http_client, &oauth_client);
+    let client = twitter::Client::new(&authenticated_http_client);
 
     let m = clap::Command::new("twt")
         .version(clap::crate_version!())
@@ -35,8 +37,6 @@ fn main() -> Result<()> {
 
     match m.subcommand() {
         Some(("get-tweets", args)) => {
-            let token = oauth_client.get_access_token()?;
-            let client = twitter::Client::new(&http_client, token);
             let ids = args
                 .get_many("ids")
                 .ok_or(anyhow!("no ids!"))?

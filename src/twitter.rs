@@ -5,7 +5,6 @@ const BASE_URL: &str = "https://api.twitter.com/2/";
 
 pub struct Client<'a, C> {
     http_client: &'a C,
-    token: String,
 }
 
 #[derive(Debug, Serialize, Deserialize, PartialEq)]
@@ -30,8 +29,8 @@ pub struct Tweets {
 }
 
 impl<'a, C: crate::http::Client> Client<'a, C> {
-    pub fn new(http_client: &'a C, token: String) -> Client<'a, C> {
-        Client { http_client, token }
+    pub fn new(http_client: &'a C) -> Client<'a, C> {
+        Client { http_client }
     }
 
     pub fn get_tweets<T: AsRef<str>>(&self, ids: &[T]) -> Result<Tweets> {
@@ -39,9 +38,7 @@ impl<'a, C: crate::http::Client> Client<'a, C> {
         let ids_str: String =
             itertools::Itertools::intersperse(ids.iter().map(|s| s.as_ref()), ",").collect();
         url.query_pairs_mut().append_pair("ids", &ids_str);
-        let req = http::Request::get(url.to_string())
-            .header("Authorization", format!("Bearer {}", self.token))
-            .body("")?;
+        let req = http::Request::get(url.to_string()).body("")?;
 
         let resp = self.http_client.send(req)?;
         let status = resp.status();
@@ -87,7 +84,7 @@ mod tests {
                 .to_string(),
             )
             .unwrap()]);
-        let client = Client::new(&http_client, "the-token".to_string());
+        let client = Client::new(&http_client);
 
         let tweets = client.get_tweets(&["foo", "bar"]).unwrap();
 
@@ -109,7 +106,6 @@ mod tests {
         expect(&tweets_req.uri()).to(equal(
             format!("{}{}", BASE_URL, "tweets?ids=foo%2Cbar").as_str(),
         ));
-        expect(tweets_req.headers().get("authorization").unwrap()).to(equal("Bearer the-token"));
     }
 
     #[test]
@@ -130,7 +126,7 @@ mod tests {
                 .to_string(),
             )
             .unwrap()]);
-        let client = Client::new(&http_client, String::new());
+        let client = Client::new(&http_client);
 
         let tweets = client.get_tweets(&["foo"]).unwrap();
 
@@ -154,7 +150,7 @@ mod tests {
             .status(400)
             .body("boom".to_string())
             .unwrap()]);
-        let client = Client::new(&http_client, String::new());
+        let client = Client::new(&http_client);
 
         let error = client.get_tweets(&["foo"]);
 
@@ -165,7 +161,7 @@ mod tests {
     #[test]
     fn when_the_request_cant_be_made_it_returns_an_error() {
         let http_client = http::mock::Client::new([]);
-        let client = Client::new(&http_client, String::new());
+        let client = Client::new(&http_client);
 
         let error = client.get_tweets(&["foo"]);
 

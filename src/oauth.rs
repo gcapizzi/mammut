@@ -141,14 +141,40 @@ impl TokenCache for XDGTokenCache {
     }
 }
 
-pub struct Client<'a, H, A, C> {
+pub trait Client {
+    fn get_access_token(&self) -> Result<String>;
+    fn refresh_access_token(&self) -> Result<String>;
+}
+
+pub struct DefaultClient<'a, H, A, C> {
     http_client: &'a H,
     authenticator: &'a A,
     cache: &'a C,
     config: Config<'a>,
 }
 
-impl<'a, H, A, C> Client<'a, H, A, C>
+impl<H, A, C> Client for DefaultClient<'_, H, A, C>
+where
+    H: crate::http::Client,
+    A: Authenticator,
+    C: TokenCache,
+{
+    fn get_access_token(&self) -> Result<String> {
+        let token = self.get_token()?;
+        Ok(token.access_token().clone())
+    }
+
+    fn refresh_access_token(&self) -> Result<String> {
+        let token = self
+            .cache
+            .get()
+            .and_then(|t| self.refresh_token(t))
+            .or_else(|_| self.login())?;
+        Ok(token.access_token().clone())
+    }
+}
+
+impl<'a, H, A, C> DefaultClient<'a, H, A, C>
 where
     H: crate::http::Client,
     A: Authenticator,
@@ -159,18 +185,13 @@ where
         authenticator: &'a A,
         cache: &'a C,
         config: Config<'a>,
-    ) -> Client<'a, H, A, C> {
-        Client {
+    ) -> DefaultClient<'a, H, A, C> {
+        DefaultClient {
             http_client,
             authenticator,
             cache,
             config,
         }
-    }
-
-    pub fn get_access_token(&self) -> Result<String> {
-        let token = self.get_token()?;
-        Ok(token.access_token().clone())
     }
 
     fn get_token(&self) -> Result<Token> {

@@ -4,25 +4,25 @@ use std::collections::HashMap;
 
 pub struct Authenticator {
     code: String,
-    auth_url: std::sync::Mutex<Option<url::Url>>,
+    auth_url: std::cell::RefCell<Option<url::Url>>,
 }
 
 impl Authenticator {
     pub fn new(code: String) -> Authenticator {
         Authenticator {
             code,
-            auth_url: std::sync::Mutex::new(None),
+            auth_url: std::cell::RefCell::new(None),
         }
     }
 
     pub fn last_auth_url(&self) -> Option<url::Url> {
-        self.auth_url.lock().unwrap().clone()
+        self.auth_url.borrow().clone()
     }
 }
 
 impl oauth::Authenticator for Authenticator {
     fn authenticate_user(&self, auth_url: &url::Url) -> Result<url::Url> {
-        *self.auth_url.lock().unwrap() = Some(auth_url.clone());
+        *self.auth_url.borrow_mut() = Some(auth_url.clone());
 
         let auth_url_params: HashMap<_, _> = auth_url.query_pairs().into_owned().collect();
         let state = auth_url_params.get("state").ok_or(anyhow!("no `state`"))?;
@@ -38,32 +38,55 @@ impl oauth::Authenticator for Authenticator {
 }
 
 pub struct TokenCache {
-    value: std::sync::Mutex<Option<oauth::Token>>,
+    value: std::cell::RefCell<Option<oauth::Token>>,
 }
 
 impl TokenCache {
     pub fn empty() -> TokenCache {
         TokenCache {
-            value: std::sync::Mutex::new(None),
+            value: std::cell::RefCell::new(None),
         }
     }
 
     pub fn with_value(value: oauth::Token) -> TokenCache {
         TokenCache {
-            value: std::sync::Mutex::new(Some(value)),
+            value: std::cell::RefCell::new(Some(value)),
         }
     }
 }
 
 impl oauth::TokenCache for TokenCache {
     fn get(&self) -> Result<oauth::Token> {
-        let token = self.value.lock().unwrap();
-        token.clone().ok_or(anyhow!("no token"))
+        self.value.borrow().clone().ok_or(anyhow!("no token"))
     }
 
     fn set(&self, value: &oauth::Token) -> Result<()> {
-        let mut token = self.value.lock().unwrap();
-        *token = Some(value.clone());
+        *self.value.borrow_mut() = Some(value.clone());
         Ok(())
+    }
+}
+
+pub struct Client {
+    token: std::cell::RefCell<Result<String, String>>,
+}
+
+impl Client {
+    pub fn new(token: Result<String, String>) -> Client {
+        Client {
+            token: std::cell::RefCell::new(token),
+        }
+    }
+}
+
+impl oauth::Client for Client {
+    fn get_access_token(&self) -> Result<String> {
+        self.token.borrow().clone().map_err(|e| anyhow!(e))
+    }
+
+    fn refresh_access_token(&self) -> Result<String> {
+        _ = self
+            .token
+            .replace_with(|t| t.clone().map(|t| format!("{}-REFRESHED", t)));
+        self.get_access_token()
     }
 }
