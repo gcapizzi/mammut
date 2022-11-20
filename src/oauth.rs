@@ -199,7 +199,7 @@ where
             .get()
             .and_then(|t| {
                 if t.is_expired() {
-                    self.refresh_token(t).or_else(|_| self.login())
+                    self.refresh_token(t)
                 } else {
                     Ok(t)
                 }
