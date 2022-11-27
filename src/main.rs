@@ -4,13 +4,15 @@ mod twitter;
 
 use anyhow::{anyhow, Result};
 
+const APP_NAME: &str = "mammut";
+
 fn main() -> Result<()> {
     let client_id = std::env::var("TWT_CLIENT_ID")?;
     let client_secret = std::env::var("TWT_CLIENT_SECRET")?;
 
     let http_client = http::UreqClient::new();
     let authenticator = oauth::StdAuthenticator::new();
-    let cache = oauth::XDGTokenCache::new("mammut".to_string());
+    let cache = oauth::XDGTokenCache::new(APP_NAME.to_string());
     let oauth_client = oauth::DefaultClient::new(
         &http_client,
         &authenticator,
@@ -26,7 +28,7 @@ fn main() -> Result<()> {
     let authenticated_http_client = http::AuthenticatedClient::new(&http_client, &oauth_client);
     let client = twitter::Client::new(&authenticated_http_client);
 
-    let m = clap::Command::new("mammut")
+    let m = clap::Command::new(APP_NAME)
         .version(clap::crate_version!())
         .subcommand_required(true)
         .subcommand(
