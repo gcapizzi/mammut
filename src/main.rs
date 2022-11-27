@@ -10,7 +10,7 @@ fn main() -> Result<()> {
 
     let http_client = http::UreqClient::new();
     let authenticator = oauth::StdAuthenticator::new();
-    let cache = oauth::XDGTokenCache::new("twt".to_string());
+    let cache = oauth::XDGTokenCache::new("mammut".to_string());
     let oauth_client = oauth::DefaultClient::new(
         &http_client,
         &authenticator,
@@ -26,7 +26,7 @@ fn main() -> Result<()> {
     let authenticated_http_client = http::AuthenticatedClient::new(&http_client, &oauth_client);
     let client = twitter::Client::new(&authenticated_http_client);
 
-    let m = clap::Command::new("twt")
+    let m = clap::Command::new("mammut")
         .version(clap::crate_version!())
         .subcommand_required(true)
         .subcommand(
