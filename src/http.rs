@@ -152,7 +152,7 @@ mod tests {
             .status(StatusCode::OK)
             .body("the-response-body".to_string())
             .unwrap()]);
-        let oauth_client = crate::oauth::mock::Client::new(Ok("the-token".to_string()));
+        let oauth_client = crate::oauth::client::mock::Client::new(Ok("the-token".to_string()));
         let authenticated_client =
             crate::http::AuthenticatedClient::new(&http_client, &oauth_client);
 
@@ -196,7 +196,7 @@ mod tests {
                 .body("the-body".to_string())
                 .unwrap(),
         ]);
-        let oauth_client = crate::oauth::mock::Client::new(Ok("the-token".to_string()));
+        let oauth_client = crate::oauth::client::mock::Client::new(Ok("the-token".to_string()));
         let authenticated_client =
             crate::http::AuthenticatedClient::new(&http_client, &oauth_client);
 
