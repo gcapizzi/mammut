@@ -20,3 +20,5 @@ xdg = "2.4"
 
 [dev-dependencies]
 expect = { path = "../expect" }
+tempfile = "3"
+serial_test = "*"
