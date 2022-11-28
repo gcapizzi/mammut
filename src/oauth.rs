@@ -52,4 +52,5 @@ pub struct Config<'a> {
     pub auth_url: &'a str,
     pub token_url: &'a str,
     pub redirect_url: &'a str,
+    pub scope: &'a str,
 }

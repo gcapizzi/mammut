@@ -65,6 +65,7 @@ fn main() -> Result<()> {
             auth_url: &auth_url,
             token_url: &token_url,
             redirect_url: &config.redirect_url,
+            scope: "read",
         },
     );
     let authenticated_http_client = http::AuthenticatedClient::new(&http_client, &oauth_client);

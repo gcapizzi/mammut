@@ -105,9 +105,9 @@ where
         auth_url
             .query_pairs_mut()
             .append_pair("response_type", "code")
-            .append_pair("client_id", &self.config.client_id)
-            .append_pair("redirect_uri", &self.config.redirect_url)
-            .append_pair("scope", "read")
+            .append_pair("client_id", self.config.client_id)
+            .append_pair("redirect_uri", self.config.redirect_url)
+            .append_pair("scope", self.config.scope)
             .append_pair("state", state.as_str())
             .append_pair("code_challenge", pkce_challenge.as_str())
             .append_pair("code_challenge_method", "S256");
@@ -235,6 +235,7 @@ mod tests {
                 auth_url: "https://the-auth-url",
                 token_url: "https://the-token-url",
                 redirect_url: "https://the-redirect-url",
+                scope: "the-scope",
             },
         );
 
@@ -246,7 +247,7 @@ mod tests {
         let auth_url_params: HashMap<_, _> = auth_url.query_pairs().into_owned().collect();
         expect(auth_url_params.get("response_type").unwrap()).to(equal("code"));
         expect(auth_url_params.get("client_id").unwrap()).to(equal("id"));
-        expect(auth_url_params.get("scope").unwrap()).to(equal("read"));
+        expect(auth_url_params.get("scope").unwrap()).to(equal("the-scope"));
         expect(&auth_url_params.get("code_challenge_method")).to(equal(Some(&"S256".to_string())));
 
         let redirect_url = auth_url_params.get("redirect_uri").unwrap();
@@ -295,6 +296,7 @@ mod tests {
                 auth_url: "https://the-auth-url",
                 token_url: "https://the-token-url",
                 redirect_url: "https://the-redirect-url",
+                scope: "the-scope",
             },
         );
 
@@ -339,6 +341,7 @@ mod tests {
                 auth_url: "https://the-auth-url",
                 token_url: "https://the-token-url",
                 redirect_url: "https://the-redirect-url",
+                scope: "the-scope",
             },
         );
 
@@ -394,6 +397,7 @@ mod tests {
                 auth_url: "https://the-auth-url",
                 token_url: "https://the-token-url",
                 redirect_url: "https://the-redirect-url",
+                scope: "the-scope",
             },
         );
 
@@ -451,6 +455,7 @@ mod tests {
                 auth_url: "https://the-auth-url",
                 token_url: "https://the-token-url",
                 redirect_url: "https://the-redirect-url",
+                scope: "the-scope",
             },
         );
 
@@ -495,6 +500,7 @@ mod tests {
                 auth_url: "https://the-auth-url",
                 token_url: "https://the-token-url",
                 redirect_url: "https://the-redirect-url",
+                scope: "the-scope",
             },
         );
 
@@ -549,6 +555,7 @@ mod tests {
                 auth_url: "https://the-auth-url",
                 token_url: "https://the-token-url",
                 redirect_url: "https://the-redirect-url",
+                scope: "the-scope",
             },
         );
 
@@ -616,6 +623,7 @@ mod tests {
                 auth_url: "https://the-auth-url",
                 token_url: "https://the-token-url",
                 redirect_url: "https://the-redirect-url",
+                scope: "the-scope",
             },
         );
 
