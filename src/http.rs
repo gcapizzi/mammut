@@ -135,8 +135,17 @@ mod tests {
 
         let body: serde_json::Value = serde_json::from_reader(response.into_body()).unwrap();
         if let serde_json::Value::Object(body_map) = body {
-            let form_map = body_map.get("form").unwrap();
-            expect(form_map).to(equal(serde_json::json!({"foo": "1", "bar": "2"})));
+            expect(body_map.get("args").unwrap()).to(equal(serde_json::json!({"foo": "bar"})));
+            expect(body_map.get("form").unwrap())
+                .to(equal(serde_json::json!({"foo": "1", "bar": "2"})));
+
+            let headers = body_map.get("headers").unwrap();
+            if let serde_json::Value::Object(headers_map) = headers {
+                expect(headers_map.get("Content-Type").unwrap())
+                    .to(equal("application/x-www-form-urlencoded"));
+            } else {
+                panic!("{}", headers)
+            };
         } else {
             panic!("{}", body);
         }
