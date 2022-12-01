@@ -13,25 +13,6 @@ impl UreqClient {
     pub fn new() -> UreqClient {
         UreqClient {}
     }
-
-    fn to_ureq_request<T: AsRef<[u8]>>(req: http::Request<T>) -> Result<ureq::Response> {
-        use ureq::OrAnyStatus;
-        let mut ureq_req = ureq::request(req.method().as_str(), &req.uri().to_string());
-        for (name, value) in req.headers() {
-            ureq_req = ureq_req.set(name.as_str(), value.to_str()?);
-        }
-        ureq_req
-            .send_bytes(req.body().as_ref())
-            .or_any_status()
-            .map_err(|e| anyhow!(e))
-    }
-
-    fn from_ureq_response(resp: ureq::Response) -> Result<http::Response<Box<dyn std::io::Read>>> {
-        http::Response::builder()
-            .status(resp.status())
-            .body(resp.into_reader() as Box<dyn std::io::Read>)
-            .map_err(|e| anyhow!(e))
-    }
 }
 
 impl Client for UreqClient {
@@ -39,7 +20,18 @@ impl Client for UreqClient {
         &self,
         req: http::Request<T>,
     ) -> Result<http::Response<Box<dyn std::io::Read>>> {
-        Self::to_ureq_request(req).and_then(Self::from_ureq_response)
+        let mut ureq_req = ureq::request(req.method().as_str(), &req.uri().to_string());
+        for (name, value) in req.headers() {
+            ureq_req = ureq_req.set(name.as_str(), value.to_str()?);
+        }
+
+        use ureq::OrAnyStatus;
+        let ureq_res = ureq_req.send_bytes(req.body().as_ref()).or_any_status()?;
+
+        http::Response::builder()
+            .status(ureq_res.status())
+            .body(ureq_res.into_reader() as Box<dyn std::io::Read>)
+            .map_err(|e| anyhow!(e))
     }
 }
 
