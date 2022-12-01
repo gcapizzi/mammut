@@ -75,7 +75,7 @@ fn main() -> Result<()> {
         Some(("get-status", args)) => {
             let id = args.get_one::<String>("id").unwrap();
             let status = client.get_status(&id)?;
-            println!("{:?}", status)
+            println!("{:#?}", status)
         }
         _ => {}
     }
