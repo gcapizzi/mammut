@@ -28,9 +28,11 @@ impl Client for UreqClient {
         use ureq::OrAnyStatus;
         let ureq_res = ureq_req.send_bytes(req.body().as_ref()).or_any_status()?;
 
-        http::Response::builder()
-            .status(ureq_res.status())
-            .body(ureq_res.into_reader() as Box<dyn std::io::Read>)
+        let mut res = http::Response::builder().status(ureq_res.status());
+        for header_name in ureq_res.headers_names() {
+            res = res.header(&header_name, ureq_res.header(&header_name).unwrap());
+        }
+        res.body(ureq_res.into_reader() as Box<dyn std::io::Read>)
             .map_err(|e| anyhow!(e))
     }
 }
@@ -128,6 +130,8 @@ mod tests {
                     .unwrap(),
             )
             .unwrap();
+
+        expect(&response.headers()["Content-Type"]).to(equal("application/json"));
 
         let body: serde_json::Value = serde_json::from_reader(response.into_body()).unwrap();
         if let serde_json::Value::Object(body_map) = body {
